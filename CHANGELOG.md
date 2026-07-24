@@ -1,5 +1,11 @@
 ﻿# StormPower Changelog
 
+## 1.7.1
+- Taller overlay UI so more options fit; home reorganized; duplicate wave/toggle entries removed
+- Search bar across all menus (`/` focuses search)
+- EF5 Wedge Tornado: buffs tornado radii/winds in environment + live RAM, then spawns
+- In-game update notify keeps repeating until you update (sticky banner too)
+
 ## 1.7.0
 - Wave engine rebuilt: constant repeating tsunamis instead of one locked mega-wave
 - Default height 12x (boat-slamming); Clear Waves releases RAM lock then cancels gerstner

@@ -10,27 +10,24 @@
   const backBtn = document.getElementById("backBtn");
   const popOutBtn = document.getElementById("popOutBtn");
   const lastAction = document.getElementById("lastAction");
-  const peerEl = document.getElementById("peer");
   const countEl = document.getElementById("count");
   const sizeEl = document.getElementById("size");
   const distEl = document.getElementById("dist");
-  const peerValue = document.getElementById("peerValue");
   const countValue = document.getElementById("countValue");
   const sizeValue = document.getElementById("sizeValue");
   const distValue = document.getElementById("distValue");
-  const sideLeft = document.getElementById("sideLeft");
-  const sideRight = document.getElementById("sideRight");
+  const searchEl = document.getElementById("search");
 
   let applying = false;
   let flashUntil = 0;
   let detached = false;
+  let searchTimer = null;
 
   function sizeFromSlider() {
     return Number(sizeEl.value) / 2;
   }
 
   function syncLabels() {
-    peerValue.textContent = String(peerEl.value);
     countValue.textContent = String(countEl.value);
     sizeValue.textContent = `${sizeFromSlider().toFixed(1)}×`;
     distValue.textContent = `${distEl.value} m`;
@@ -39,7 +36,6 @@
   function pushSettings() {
     if (applying || !window.stormpower) return;
     window.stormpower.updateSettings({
-      peer: Number(peerEl.value),
       count: Number(countEl.value),
       size: sizeFromSlider(),
       dist: Number(distEl.value),
@@ -53,18 +49,32 @@
     popOutBtn.classList.toggle("active", detached);
   }
 
-  [peerEl, countEl, sizeEl, distEl].forEach((el) => {
+  [countEl, sizeEl, distEl].forEach((el) => {
     el.addEventListener("input", () => {
       syncLabels();
       pushSettings();
     });
   });
 
-  sideLeft.addEventListener("click", () => {
-    window.stormpower?.updateSettings({ side: "left" });
+  searchEl.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      window.stormpower?.setSearch(searchEl.value);
+    }, 80);
   });
-  sideRight.addEventListener("click", () => {
-    window.stormpower?.updateSettings({ side: "right" });
+
+  searchEl.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
+      e.preventDefault();
+      window.stormpower?.nav(
+        e.key === "ArrowDown" ? "down" : e.key === "ArrowUp" ? "up" : "select"
+      );
+    }
+    if (e.key === "Escape") {
+      searchEl.value = "";
+      window.stormpower?.setSearch("");
+      searchEl.blur();
+    }
   });
 
   backBtn.addEventListener("click", () => window.stormpower?.back());
@@ -76,13 +86,14 @@
     pathEl.textContent = state.path || state.title || "Home";
     lastAction.textContent = state.lastAction || "";
 
+    if (document.activeElement !== searchEl) {
+      searchEl.value = state.search || "";
+    }
+
     if (state.settings) {
-      peerEl.value = state.settings.peer ?? 0;
       countEl.value = state.settings.count ?? 5;
       distEl.value = state.settings.dist ?? 20;
       sizeEl.value = Math.round((state.settings.size ?? 1) * 2);
-      sideLeft.classList.toggle("active", state.settings.side !== "right");
-      sideRight.classList.toggle("active", state.settings.side === "right");
       syncLabels();
     }
 
@@ -142,22 +153,26 @@
     window.stormpower.onUpdate((info) => {
       if (!info?.updateAvailable) return;
       updateBanner.classList.remove("hidden");
-      updateText.textContent = `Update ${info.latest} available`;
+      updateText.textContent = `Update v${info.latest} available — stays until you update`;
     });
     window.stormpower.onDetach((s) => setDetachedUi(!!s?.detached));
     window.stormpower.getConfig().then((cfg) => {
       versionPill.textContent = `v${cfg.version || "—"}`;
       if (cfg.state) render(cfg.state);
       setDetachedUi(!!cfg.detached);
+      if (cfg.state?.updateAvailable || cfg.updateAvailable) {
+        updateBanner.classList.remove("hidden");
+      }
     });
     updateBtn.addEventListener("click", async () => {
       updateText.textContent = "Opening updater…";
       await window.stormpower.openUpdateUi();
-      updateText.textContent = "Update available";
+      updateText.textContent = "Update available — stays until you update";
     });
   }
 
   window.addEventListener("keydown", (e) => {
+    if (document.activeElement === searchEl) return;
     const map = {
       ArrowUp: "up",
       ArrowDown: "down",
@@ -170,6 +185,10 @@
     if (map[e.key]) {
       e.preventDefault();
       window.stormpower?.nav(map[e.key]);
+    }
+    if (e.key === "/" && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      searchEl.focus();
     }
   });
 

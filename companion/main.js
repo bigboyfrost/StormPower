@@ -16,6 +16,7 @@ const appUpdater = require("./appUpdater");
 const { checkForUpdates: checkZipUpdates, spawnFinishUpdate } = require("./updater");
 const { createMenuEngine } = require("./menuEngine");
 const engineMod = require("./engineMod");
+const tornadoMod = require("./tornadoMod");
 const liveMemory = require("./liveMemory");
 const {
   isPackaged,
@@ -27,8 +28,9 @@ const {
 } = require("./paths");
 
 const PORT = 21773;
-const WIN_W = 622;
-const WIN_H = 800;
+const WIN_W = 640;
+const WIN_H_MIN = 980;
+const WIN_H_MAX = 1280;
 const TOGGLE_W = 64;
 const TOGGLE_H = 64;
 const UPDATE_W = 720;
@@ -36,7 +38,16 @@ const UPDATE_H = 640;
 const UPDATE_UI_ONLY = process.argv.includes("--update-ui");
 const UPDATE_POLL_MS = 2 * 60 * 1000; // check while running
 const UPDATE_THROTTLE_MS = 45 * 1000;
-const UPDATE_INGAME_RESEND_MS = 90 * 1000;
+const UPDATE_INGAME_RESEND_MS = 18 * 1000; // keep nagging until they update
+
+function mainWindowHeight() {
+  try {
+    const wa = screen.getPrimaryDisplay().workArea;
+    return Math.min(WIN_H_MAX, Math.max(WIN_H_MIN, wa.height - 70));
+  } catch (_) {
+    return WIN_H_MIN;
+  }
+}
 
 let mainWindow = null;
 let toggleWindow = null;
@@ -171,12 +182,13 @@ function placeWindows(side) {
   const isRight = side === "right";
   const toggleX = isRight ? display.x + display.width - TOGGLE_W - 10 : display.x + 10;
   const toggleY = display.y + 8;
+  const h = mainWindowHeight();
   const mainX = isRight ? display.x + display.width - WIN_W - 16 : display.x + 16;
   const mainY = display.y + 8 + TOGGLE_H + 6;
 
   // When popped out, leave menu where the user dragged it (other monitor OK)
   if (mainWindow && !mainWindow.isDestroyed() && !detached) {
-    mainWindow.setBounds({ x: mainX, y: mainY, width: WIN_W, height: WIN_H });
+    mainWindow.setBounds({ x: mainX, y: mainY, width: WIN_W, height: h });
   }
   if (toggleWindow && !toggleWindow.isDestroyed()) {
     toggleWindow.setBounds({ x: toggleX, y: toggleY, width: TOGGLE_W, height: TOGGLE_H });
@@ -252,8 +264,13 @@ async function pollForUpdates(reason = "poll") {
     if (info?.updateAvailable) {
       sendMain("update-available", info);
       notifyInGameUpdate(info, { force: reason === "bridge" || reason === "startup" });
-    } else {
+    } else if (info && info.updateAvailable === false) {
+      // Only clear the sticky nag when we positively know there is no update.
+      if (pendingInGameUpdateVer) {
+        enqueue(`notify_update_clear|${menu?.settings?.peer ?? 0}`);
+      }
       pendingInGameUpdateVer = "";
+      lastInGameUpdateNotify = "";
     }
   } catch (err) {
     console.error("[StormPower] update check failed:", err?.message || err);
@@ -374,8 +391,8 @@ function createHttpBridge() {
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: WIN_W,
-    height: WIN_H,
-    resizable: false,
+    height: mainWindowHeight(),
+    resizable: true,
     maximizable: false,
     fullscreenable: false,
     minimizable: false,
@@ -387,6 +404,9 @@ function createMainWindow() {
     focusable: true,
     show: false,
     hasShadow: true,
+    minWidth: WIN_W,
+    maxWidth: WIN_W,
+    minHeight: 860,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -397,7 +417,6 @@ function createMainWindow() {
   mainWindow.setAlwaysOnTop(true, "screen-saver");
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
-  mainWindow.on("will-resize", (e) => e.preventDefault());
   mainWindow.setMovable(true);
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -630,6 +649,20 @@ app.whenReady().then(async () => {
         }
         return res;
       }
+      if (action === "tornado_ef5") {
+        const res = tornadoMod.setEf5(!!on);
+        if (on && res.ok) {
+          const mapOn = tornadoMod.livePatchMap(tornadoMod.STOCK, tornadoMod.EF5);
+          const mapHold = tornadoMod.livePatchMap(tornadoMod.EF5, tornadoMod.EF5);
+          liveMemory.patchFloatMap(`${mapOn},${mapHold}`).catch(() => {});
+          enqueue(`disaster|${menu?.settings?.peer ?? 0}|tornado|${menu?.settings?.dist || 200}`);
+          res.message = "EF5 wedge ON + tornado spawning ahead";
+        } else if (!on && res.ok) {
+          const mapOff = tornadoMod.livePatchMap(tornadoMod.EF5, tornadoMod.STOCK);
+          liveMemory.patchFloatMap(mapOff).catch(() => {});
+        }
+        return res;
+      }
       if (action === "check_updates") {
         const info = await appUpdater.checkForUpdates({ silent: false });
         cachedUpdateInfo = info;
@@ -663,6 +696,8 @@ app.whenReady().then(async () => {
     const overrev = engineMod.isOverrevInstalled();
     menu.setToggle("overrev_engine", !!overrev.installed);
     if (overrev.installed) liveMemory.startEngineLive();
+    const ef5 = tornadoMod.isEf5Installed();
+    menu.setToggle("tornado_ef5", !!ef5.installed);
   } catch (_) {}
 
   createHttpBridge();
@@ -727,11 +762,12 @@ ipcMain.handle("get-config", () => ({
   port: PORT,
   toggleKey: "F4 / Insert / F8",
   width: WIN_W,
-  height: WIN_H,
+  height: mainWindowHeight(),
   product: "StormPower",
   studio: "Aimless Developement",
   version: readVersion(),
   detached,
+  updateAvailable: !!(cachedUpdateInfo && cachedUpdateInfo.updateAvailable),
   state: menu ? menu.getSnapshot() : null,
 }));
 
@@ -740,6 +776,7 @@ ipcMain.on("nav", (_e, action) => menu && menu.handleNav(action));
 ipcMain.on("toggle-menu", () => menu && menu.toggleOpen());
 ipcMain.on("set-open", (_e, open) => menu && menu.setOpen(!!open));
 ipcMain.on("update-settings", (_e, partial) => menu && menu.updateSettings(partial || {}));
+ipcMain.on("set-search", (_e, q) => menu && menu.setSearch(q));
 ipcMain.on("activate-index", (_e, idx) => menu && menu.selectIndex(Number(idx)));
 ipcMain.on("back", () => menu && menu.handleNav("back"));
 ipcMain.on("set-detached", (_e, on) => setDetached(!!on));

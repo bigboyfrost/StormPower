@@ -387,6 +387,10 @@ function shutdown() {
   engineChannel.stop();
 }
 
+function patchFloatMap(map, timeoutMs = 120000) {
+  return engineChannel.send(`engine ${map}`, timeoutMs);
+}
+
 module.exports = {
   WAVE_MARKER,
   configure,
@@ -397,6 +401,7 @@ module.exports = {
   startEngineLive,
   stopEngineLive,
   patchEnginesOnce,
+  patchFloatMap,
   getStatus,
   shutdown,
   ensureHelperOnDisk,

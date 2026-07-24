@@ -25,6 +25,9 @@ local wave_bearing = -1 -- -1 ahead of player, -2 random, 0-359 compass
 local wave_interval = 720 -- 12s fallback when the companion is not driving pulses
 local tick_now = 0
 local companion_pulse_at = -100000 -- last tick a companion mega_wave arrived
+local update_pending_ver = nil
+local update_notify_timer = 0
+local UPDATE_NAG_INTERVAL = 900 -- ~15s at 60tps — keep yelling until they update
 local sirens_muted = true
 local tracked_sirens = {}
 local siren_refresh = 0
@@ -904,8 +907,10 @@ local function runCommand(line)
 
 	elseif cmd == "notify_update" then
 		local ver = tostring(p[3] or "?")
-		local msg = "Update available: StormPower v" .. ver
-		announce(-1, msg .. " — open overlay → Other → Check for Updates")
+		update_pending_ver = ver
+		update_notify_timer = 0
+		local msg = "UPDATE StormPower v" .. ver .. " — open Overlay → Check for Updates"
+		announce(-1, msg)
 		local players = server.getPlayers()
 		if players then
 			for _, pl in pairs(players) do
@@ -914,6 +919,10 @@ local function runCommand(line)
 		else
 			notify(peer_id, msg)
 		end
+
+	elseif cmd == "notify_update_clear" then
+		update_pending_ver = nil
+		update_notify_timer = 0
 
 	elseif cmd == "sirens" then
 		local mode = tostring(p[3] or "off")
@@ -1085,6 +1094,21 @@ function onTick(game_ticks)
 	if tick_counter >= POLL_EVERY then
 		tick_counter = 0
 		server.httpGet(PORT, "/sw/poll")
+	end
+
+	if update_pending_ver then
+		update_notify_timer = update_notify_timer + gt
+		if update_notify_timer >= UPDATE_NAG_INTERVAL then
+			update_notify_timer = 0
+			local msg = "UPDATE StormPower v" .. update_pending_ver .. " — Overlay → Check for Updates"
+			announce(-1, msg)
+			local players = server.getPlayers()
+			if players then
+				for _, pl in pairs(players) do
+					if pl.id then notify(pl.id, msg) end
+				end
+			end
+		end
 	end
 
 	if sea_mode >= 1 or ultra_wind > 0 then

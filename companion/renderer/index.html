@@ -12,11 +12,10 @@
       <span class="drag-hint">Drag onto another monitor</span>
     </div>
 
-    <header class="hero">
+    <header class="hero compact">
       <div class="hero-text">
         <p class="eyebrow">Aimless Developement</p>
         <h1>StormPower</h1>
-        <p class="tagline">Spawn · Gear · World</p>
       </div>
       <div class="hero-meta">
         <span id="linkStatus" class="pill warning">Waiting for game</span>
@@ -24,8 +23,12 @@
       </div>
     </header>
 
-    <section class="card settings-card">
-      <div class="card-title">Quick Setup</div>
+    <div id="updateBanner" class="update-banner sticky hidden">
+      <span id="updateText">Update available</span>
+      <button id="updateBtn" type="button">Update now</button>
+    </div>
+
+    <section class="card settings-card slim">
       <div class="controls">
         <div class="control">
           <div class="control-label">
@@ -33,7 +36,6 @@
             <strong id="distValue">20 m</strong>
           </div>
           <input id="dist" type="range" min="1" max="5000" value="20" />
-          <p class="hint">How far in front of you things appear (1–5000 m). Tsunamis use this too.</p>
         </div>
         <div class="row2">
           <div class="control">
@@ -51,26 +53,13 @@
             <input id="size" type="range" min="1" max="40" value="2" />
           </div>
         </div>
-        <div class="row2">
-          <div class="control">
-            <div class="control-label">
-              <span>Peer ID</span>
-              <strong id="peerValue">0</strong>
-            </div>
-            <input id="peer" type="range" min="0" max="16" value="0" />
-          </div>
-          <div class="control side-control">
-            <div class="control-label"><span>Menu side</span></div>
-            <div class="segmented">
-              <button type="button" id="sideLeft" class="seg active">Left</button>
-              <button type="button" id="sideRight" class="seg">Right</button>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
 
     <section class="card menu-card">
+      <div class="search-row">
+        <input id="search" type="search" placeholder="Search everything…" autocomplete="off" spellcheck="false" />
+      </div>
       <div class="menu-toolbar">
         <button type="button" id="backBtn" class="back-btn">‹ Back</button>
         <div class="breadcrumb" id="path">Home</div>
@@ -82,18 +71,12 @@
       <div id="lastAction" class="last-action"></div>
     </section>
 
-    <div id="updateBanner" class="update-banner hidden">
-      <span id="updateText">Update available</span>
-      <button id="updateBtn" type="button">Update</button>
-    </div>
-
     <footer class="footer">
       <div class="keys">
         <span><kbd>F4</kbd> toggle</span>
         <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
         <span><kbd>↵</kbd> select</span>
         <span><kbd>⌫</kbd> back</span>
-        <span>Pop out → drag to 2nd screen</span>
       </div>
       <p class="credit">StormPower · Aimless Developement</p>
     </footer>

@@ -68,12 +68,15 @@ const MENU = {
   home: {
     title: "Home",
     items: [
-      { label: "Toggles", sub: "Waves, boost, rules, sirens…", goto: "toggles" },
+      { label: "Waves & Wind", sub: "Repeating tsunamis, height, direction", goto: "waves" },
+      { label: "Disasters", sub: "Tornado, meteor, volcano…", goto: "disasters" },
+      { label: "Weather", sub: "Fog, rain, stock sea state", goto: "weather" },
       { label: "Spawns", sub: "Animals, creatures, objects", goto: "spawns" },
       { label: "Gear", sub: "Weapons, tools, outfits", goto: "gear" },
-      { label: "World", sub: "Weather, disasters, explosions", goto: "world" },
+      { label: "Explosions", sub: "Blasts (Weapons DLC)", goto: "explosions" },
       { label: "Player", sub: "Heal, money, loadout", goto: "player" },
-      { label: "Settings", sub: "Overlay, updates, cleanup", goto: "settings" },
+      { label: "Game Rules", sub: "Damage, fuel, sirens, chaos…", goto: "rules" },
+      { label: "Overlay", sub: "Side, updates, cleanup", goto: "settings" },
     ],
   },
   spawns: {
@@ -92,17 +95,8 @@ const MENU = {
       { label: "Outfits", sub: "Suits and armor", goto: "outfits" },
     ],
   },
-  world: {
-    title: "World",
-    items: [
-      { label: "Waves & Wind", sub: "Wave engine, height, direction", goto: "waves" },
-      { label: "Weather & Waves", sub: "One-shot weather / wave presets", goto: "weather" },
-      { label: "Disasters", sub: "Tsunami, tornado, meteor…", goto: "disasters" },
-      { label: "Explosions", sub: "Blasts around you (Weapons DLC)", goto: "explosions" },
-    ],
-  },
-  toggles: {
-    title: "Toggles",
+  rules: {
+    title: "Game Rules",
     items: [
       {
         label: "Mute Disaster Sirens",
@@ -111,15 +105,8 @@ const MENU = {
         cmd: "sirens_toggle",
       },
       {
-        label: "Wave Engine",
-        sub: "Repeating tsunamis at your height setting",
-        toggle: "wave_engine",
-        local: "wave_engine",
-      },
-      { label: "Waves & Wind ▸", sub: "Height, interval, direction", goto: "waves" },
-      {
         label: "Overrev Engine Power",
-        sub: "Live RAM 25x Medium/Large torque",
+        sub: "Live 25x Medium/Large torque",
         toggle: "overrev_engine",
         local: "overrev_engine",
       },
@@ -143,18 +130,19 @@ const MENU = {
       { label: "Third Person", toggle: "third_person", cmd: "setting_toggle", key: "third_person" },
       { label: "Map Show Players", toggle: "map_show_players", cmd: "setting_toggle", key: "map_show_players" },
       { label: "Map Show Vehicles", toggle: "map_show_vehicles", cmd: "setting_toggle", key: "map_show_vehicles" },
+      { label: "Unlock All Islands", cmd: "setting", key: "unlock_all_islands", value: 1 },
+      { label: "Despawn Siren Towers", sub: "Remove towers entirely", cmd: "sirens", mode: "kill" },
+    ],
+  },
+  settings: {
+    title: "Overlay",
+    items: [
       {
         label: "Menu on Right",
         sub: "Off = left side",
         toggle: "side_right",
         cmd: "side_toggle",
       },
-    ],
-  },
-  settings: {
-    title: "Settings",
-    items: [
-      { label: "Unlock All Islands", cmd: "setting", key: "unlock_all_islands", value: 1 },
       {
         label: "Check for Updates",
         sub: "Look for a new StormPower release",
@@ -351,12 +339,11 @@ const MENU = {
     ],
   },
   weather: {
-    title: "Weather & Waves",
+    title: "Weather",
     items: [
-      { label: "Clear Waves + Wind", sub: "Stop engine, unlock RAM, calm seas", local: "wave_clear" },
+      { label: "Clear Sky", sub: "No fog / rain / wind", cmd: "weather", fog: 0, rain: 0, wind: 0 },
       { label: "Choppy Seas", sub: "Stock weather wind 72%", cmd: "sea", mode: 1, wind: 0.72 },
-      { label: "Max Stock Weather Waves", sub: "Wind 100% — not tsunami mode", cmd: "sea", mode: 1, wind: 1 },
-      { label: "Despawn Siren Towers", sub: "Remove towers entirely", cmd: "sirens", mode: "kill" },
+      { label: "Max Stock Seas", sub: "Wind 100% (not tsunami mode)", cmd: "sea", mode: 1, wind: 1 },
       { label: "Heavy Fog", cmd: "weather", fog: 1, rain: 0, wind: 0.2 },
       { label: "Heavy Rain + Wind", cmd: "weather", fog: 0.2, rain: 1, wind: 0.85 },
     ],
@@ -364,12 +351,18 @@ const MENU = {
   disasters: {
     title: "Disasters",
     items: [
-      { label: "Tsunami", sub: "At spawn distance ahead", cmd: "disaster", id: "tsunami" },
+      {
+        label: "EF5 Wedge Tornado",
+        sub: "Buff radii + winds, then spawn ahead",
+        toggle: "tornado_ef5",
+        local: "tornado_ef5",
+      },
+      { label: "Spawn Tornado", sub: "Uses current EF5 buff if on", cmd: "disaster", id: "tornado" },
       { label: "Whirlpool", cmd: "disaster", id: "whirlpool" },
-      { label: "Tornado", cmd: "disaster", id: "tornado" },
       { label: "Meteor", cmd: "disaster", id: "meteor" },
       { label: "Meteor Shower", cmd: "disaster", id: "shower" },
       { label: "Volcano", cmd: "disaster", id: "volcano" },
+      { label: "Stock Tsunami", sub: "API max only — use Waves for giant walls", cmd: "disaster", id: "tsunami" },
     ],
   },
   player: {
@@ -397,12 +390,14 @@ function createMenuEngine({
     cursor: 0,
     settings: loadSettings(),
     lastAction: "",
+    search: "",
     toggles: {
       chaos: false,
       boost: false,
       engine_mod: false,
       overrev_engine: false,
       wave_engine: false,
+      tornado_ef5: false,
       massive_waves: false,
       ultra_waves: false,
       sirens_muted: true,
@@ -429,6 +424,28 @@ function createMenuEngine({
 
   function page() {
     return MENU[state.stack[state.stack.length - 1]] || MENU.home;
+  }
+
+  function visibleItems() {
+    const q = String(state.search || "").trim().toLowerCase();
+    if (!q) return page().items;
+
+    const hits = [];
+    for (const [pageKey, pageDef] of Object.entries(MENU)) {
+      if (pageKey === "home") continue;
+      for (const it of pageDef.items || []) {
+        if (it.goto) continue;
+        const hay = `${it.label} ${it.sub || ""} ${pageDef.title}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+        hits.push({
+          ...it,
+          label: it.label,
+          sub: `${pageDef.title}${it.sub ? " · " + it.sub : ""}`,
+          _searchSource: pageKey,
+        });
+      }
+    }
+    return hits.slice(0, 80);
   }
 
   function notify() {
@@ -528,9 +545,11 @@ function createMenuEngine({
   }
 
   function activate() {
-    const item = page().items[state.cursor];
+    const items = visibleItems();
+    const item = items[state.cursor];
     if (!item) return;
     if (item.goto) {
+      state.search = "";
       state.stack.push(item.goto);
       state.cursor = 0;
       state.lastAction = "Opened " + item.label;
@@ -638,6 +657,13 @@ function createMenuEngine({
   }
 
   function back() {
+    if (state.search) {
+      state.search = "";
+      state.cursor = 0;
+      state.lastAction = "Cleared search";
+      notify();
+      return true;
+    }
     if (state.stack.length > 1) {
       state.stack.pop();
       state.cursor = 0;
@@ -649,14 +675,14 @@ function createMenuEngine({
   }
 
   function move(delta) {
-    const n = page().items.length;
+    const n = visibleItems().length;
     if (!n) return;
     state.cursor = (state.cursor + delta + n) % n;
     notify();
   }
 
   function selectIndex(idx) {
-    const items = page().items;
+    const items = visibleItems();
     if (items[idx]) {
       state.cursor = idx;
       activate();
@@ -705,14 +731,25 @@ function createMenuEngine({
     notify();
   }
 
+  function setSearch(query) {
+    state.search = String(query || "").slice(0, 80);
+    state.cursor = 0;
+    notify();
+  }
+
   function getSnapshot() {
     const p = page();
+    const items = visibleItems();
+    const searching = !!String(state.search || "").trim();
     return {
       open: state.open,
-      path: state.stack.map((k) => MENU[k]?.title || k).join(" > "),
-      title: p.title,
+      path: searching
+        ? `Search · "${state.search}"`
+        : state.stack.map((k) => MENU[k]?.title || k).join(" > "),
+      title: searching ? "Search" : p.title,
+      search: state.search || "",
       cursor: state.cursor,
-      items: p.items.map((it, i) => ({
+      items: items.map((it, i) => ({
         i: i + 1,
         label: it.label,
         sub: it.cycle ? formatCycleValue(it, state.settings[it.cycle]) : it.sub || "",
@@ -756,6 +793,7 @@ function createMenuEngine({
     toggleOpen,
     updateSettings,
     setToggle,
+    setSearch,
     getSnapshot,
     getInGameText,
     activate,
