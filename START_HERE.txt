@@ -20,6 +20,8 @@ Updates
   • StormPower checks GitHub for updates automatically
   • Use the in-app Update screen when a new version is available
   • No Node.js and no zip folders required
+  • MEGA waves (engine patch): close Stormworks, run
+      engine-mod\INSTALL_MEGA_WAVES.bat
 
 If Windows SmartScreen warns
   • Click More info → Run anyway (unsigned build until a cert is added)

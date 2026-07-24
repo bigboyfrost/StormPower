@@ -247,7 +247,7 @@ const MENU = {
       },
       {
         label: "Vehicle Boost",
-        sub: "+40 kn along ship forward (seated)",
+        sub: "Warp pulses ~18m (hard teleport)",
         toggle: "boost",
         cmd: "boost_toggle",
       },

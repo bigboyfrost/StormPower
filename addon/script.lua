@@ -38,18 +38,18 @@ local chaos = {
 	step = 0,
 }
 
--- Vehicle boost: shove the seated vehicle forward in local space.
--- Do NOT use moveGroup with a foreign matrix — that slides the ship around the
--- player (feels like getting pushed back in the seat) without real travel.
+-- Vehicle boost table
 local boost = {
 	active = false,
 	peer = 0,
 	knots = 40,
 	accum = 0,
-	interval = 3, -- ~20 Hz pulses
-	sign = 1, -- local Z direction (+1 or -1); auto-picked when enabled
+	-- Hard teleport pulses (setVehiclePos / setGroupPos). Soft moveVehicle is ignored by physics on ships.
+	interval = 12, -- ~5 Hz warps
+	sign = 1,
 	seat_name = nil,
 	vehicle = 0,
+	meters_per_pulse = 18, -- ~35 kn average at 5 Hz
 }
 
 local session = {
@@ -292,7 +292,8 @@ local function spawnMegaWaveNear(peer_id, dist)
 	if not mat then
 		return false
 	end
-	server.spawnTsunami(mat, 1.0)
+	-- Magnitude >1 scales gerstner height in the ocean shader
+	server.spawnTsunami(mat, 4.0)
 	if sirens_muted then
 		silenceSirens()
 	end
@@ -319,9 +320,9 @@ local function spawnImpossibleWave(peer_id, dist)
 	if not mat then return false end
 
 	if kind == 2 then
-		server.spawnWhirlpool(mat, 1.0)
+		server.spawnWhirlpool(mat, 4.0)
 	else
-		server.spawnTsunami(mat, 1.0)
+		server.spawnTsunami(mat, 5.0)
 	end
 	-- Extra meteor-tsunami occasionally for water chaos
 	if wave_pulse % 7 == 0 then
@@ -380,7 +381,6 @@ local function findSeatName(peer_id, vehicle_id)
 	return nil
 end
 
--- Pick local +Z or -Z based on which matches player look best (world XZ).
 local function pickBoostSign(peer_id, mat)
 	local ox, oy, oz = matrix.position(mat)
 	local function worldFlat(local_z)
@@ -393,7 +393,6 @@ local function pickBoostSign(peer_id, mat)
 	end
 	local fx, fz = worldFlat(1)
 	local bx, bz = worldFlat(-1)
-
 	local wx, wz = lookFlat(peer_id)
 	local lx, ly, lz, lok = server.getPlayerLookDirection(peer_id)
 	if lok and matrix.multiplyXYZW then
@@ -403,33 +402,15 @@ local function pickBoostSign(peer_id, mat)
 			wx, wz = tx / len, tz / len
 		end
 	end
-
-	local dot_f = fx * wx + fz * wz
-	local dot_b = bx * wx + bz * wz
-	if dot_b > dot_f then return -1 end
+	if (bx * wx + bz * wz) > (fx * wx + fz * wz) then return -1 end
 	return 1
 end
 
-local function moveVehicleWorldDelta(vehicle_id, dx, dy, dz)
-	local mat, ok = server.getVehiclePos(vehicle_id)
-	if not ok or not mat then return false end
-	if matrix.invert and matrix.multiplyXYZW then
-		local inv = matrix.invert(mat)
-		if inv then
-			local lx, ly, lz = matrix.multiplyXYZW(inv, dx, dy, dz, 0)
-			server.moveVehicle(vehicle_id, matrix.multiply(mat, matrix.translation(lx, ly, lz)))
-			return true
-		end
-	end
-	-- Fallback: shove this body along its own +Z by the horizontal distance
-	local fl = math.sqrt(dx * dx + dz * dz)
-	if fl < 0.001 then return false end
-	server.moveVehicle(vehicle_id, matrix.multiply(mat, matrix.translation(0, 0, fl)))
-	return true
-end
-
--- Local-Z shove on the seated vehicle (+ companions by the same world delta).
--- Never use moveGroup with another body's matrix — that slides the ship around you.
+--[[
+  Soft moveVehicle is almost useless on large floating ships — buoyancy/physics
+  snap them back. Hard setVehiclePos / setGroupPos actually relocates the craft.
+  Tradeoff: brief unload/reload hitch each pulse.
+]]
 local function applyVehicleBoost(peer_id, game_ticks)
 	local vid = getSeatedVehicle(peer_id)
 	if not vid then
@@ -439,52 +420,33 @@ local function applyVehicleBoost(peer_id, game_ticks)
 			boost.seat_name = nil
 			boost.vehicle = 0
 			notify(peer_id, "Boost OFF (left seat)")
-			announce(peer_id, "Vehicle boost stopped — you left the seat.")
 		end
 		return false
 	end
 
 	boost.vehicle = vid
 	boost.accum = (boost.accum or 0) + math.max(1, game_ticks or 1)
-	if boost.accum < (boost.interval or 3) then
+	if boost.accum < (boost.interval or 12) then
 		return true
 	end
-	local ticks = boost.accum
 	boost.accum = 0
 
 	local mat, ok = server.getVehiclePos(vid)
 	if not ok or not mat then return false end
 
-	local meters = (boost.knots * 0.514444) * (ticks / 60)
-	if meters > 10 then meters = 10 end
-	if meters < 0.2 then meters = 0.2 end
-
+	local meters = boost.meters_per_pulse or 18
 	local sign = boost.sign or 1
 	local target = matrix.multiply(mat, matrix.translation(0, 0, sign * meters))
-	local x0, y0, z0 = matrix.position(mat)
-	local x1, y1, z1 = matrix.position(target)
-	local dx, dy, dz = x1 - x0, y1 - y0, z1 - z0
 
-	local moved_ids = { vid }
 	local group_id = getVehicleGroupId(vid)
-	if group_id and server.getVehicleGroup then
-		local ids, gok = server.getVehicleGroup(group_id)
-		if gok and ids then
-			moved_ids = {}
-			for _, id in pairs(ids) do
-				moved_ids[#moved_ids + 1] = tonumber(id) or id
-			end
-			if #moved_ids == 0 then moved_ids[1] = vid end
-		end
-	end
-
-	for i = 1, #moved_ids do
-		local id = moved_ids[i]
-		if id == vid then
-			server.moveVehicle(id, target)
-		else
-			moveVehicleWorldDelta(id, dx, dy, dz)
-		end
+	if group_id and server.setGroupPos then
+		server.setGroupPos(group_id, target)
+	elseif server.setVehiclePosSafe then
+		server.setVehiclePosSafe(vid, target)
+	elseif server.setVehiclePos then
+		server.setVehiclePos(vid, target)
+	else
+		server.moveVehicle(vid, target)
 	end
 
 	if boost.seat_name and server.setSeated then
@@ -723,8 +685,8 @@ local function runCommand(line)
 			mat = frontMatrix(peer_id, dist, 0)
 		end
 		if mat then
-			if kind == "tsunami" then server.spawnTsunami(mat, 0.85)
-			elseif kind == "whirlpool" then server.spawnWhirlpool(mat, 0.7)
+			if kind == "tsunami" then server.spawnTsunami(mat, 4.0)
+			elseif kind == "whirlpool" then server.spawnWhirlpool(mat, 3.0)
 			elseif kind == "tornado" then server.spawnTornado(mat)
 			elseif kind == "meteor" then server.spawnMeteor(mat, 0.6, false)
 			elseif kind == "shower" then server.spawnMeteorShower(mat, 0.6, false)
@@ -842,8 +804,8 @@ local function runCommand(line)
 				else
 					boost.sign = 1
 				end
-				notify(peer_id, "Boost +40 kn")
-				announce(peer_id, "Vehicle boost ON (+40 kn). If it goes the wrong way: ?boost flip")
+				notify(peer_id, "Boost WARP ON")
+				announce(peer_id, "Vehicle boost uses hard teleports (~18m pulses). Expect a brief hitch. Wrong way: ?boost flip")
 			end
 		end
 

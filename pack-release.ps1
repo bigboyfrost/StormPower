@@ -36,7 +36,8 @@ $include = @(
   "update-config.json",
   "CHANGELOG.md",
   "README.md",
-  "START_HERE.txt"
+  "START_HERE.txt",
+  "engine-mod"
 )
 
 foreach ($name in $include) {

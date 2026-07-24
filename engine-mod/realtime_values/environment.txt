@@ -1,0 +1,108 @@
+s32 fast_time_multiplier 100
+f32 foam_threshold 0.3
+f32 foam_increment 0.2
+f32 foam_falloff 0.98
+
+f32 movable_damping 0.2
+
+vec3 night_col_sky_up 0.02, 0.05, 0.077
+vec3 night_col_sky_down 0.01, 0.12, 0.16
+vec3 night_col_light 0.12, 0.12, 0.12
+vec3 night_col_water_base 0.00, 0.05, 0.07
+vec3 night_col_water_shadow 0.00, 0.05, 0.07
+
+f32 sunrise_start_hour 6.0
+f32 sunrise_hour 7.5
+f32 sunrise_end_hour 9.0
+
+vec3 sunrise_col_sky_up 0.01, 0.12, 0.16
+vec3 sunrise_col_sky_down 0.84, 0.51, 0.40
+vec3 sunrise_col_light 0.84, 0.51, 0.00
+vec3 sunrise_col_water_base 0.00, 0.15, 0.21
+vec3 sunrise_col_water_shadow 0.00, 0.15, 0.21
+
+vec3 day_col_sky_up 0.00, 0.17, 0.50
+vec3 day_col_sky_down 0.73, 0.93, 1.00
+vec3 day_col_light 1.00, 0.99, 0.89
+vec3 day_col_water_base 0.00, 0.19, 0.27
+vec3 day_col_water_shadow 0.00, 0.19, 0.27
+
+f32 sunset_start_hour 16.0
+f32 sunset_hour 17.5
+f32 sunset_end_hour 19.0
+
+vec3 sunset_col_sky_up 0.00, 0.18, 0.42
+vec3 sunset_col_sky_down 0.84, 0.51, 0.00
+vec3 sunset_col_light 0.84, 0.51, 0.00
+vec3 sunset_col_water_base 0.00, 0.15, 0.21
+vec3 sunset_col_water_shadow 0.00, 0.15, 0.21
+
+s32 star_count 10000 
+f32 star_distance 0.95
+f32 star_size 20.0 
+f32 sun_power 3.0
+f32 moon_power 5.0
+f32 moon_radius 0.24
+f32 sun_radius 0.32
+
+f32 tornado_intensity 1.0
+f32 tornado_velocity 0.0
+f32 tornado_base_radius_inner 10.0
+f32 tornado_base_radius_outer 30.0
+
+f32 tornado_wind_component_vertical 100.0
+f32 tornado_wind_component_radial 200.0
+f32 tornado_wind_component_tangential 100.0
+
+f32 tornado_weather_wind_radial 100.0
+f32 tornado_weather_wind_tangential 50.0
+
+s32 tornado_particle_spawn_delay 5
+
+f32 volcano_height_min 0.0
+f32 volcano_height_max 400.0
+f32 volcano_animation_speed 0.01
+f32 volcano_particle_magnitude 75.0
+f32 volcano_lava_heat 1.0
+f32 volcano_rock_explosion_threshold 10.0
+f32 volcano_ash_factor_pow 10.0
+f32 volcano_ash_flow_impulse 400.0
+
+f32 whirlpool_vertical_force 1200.0
+f32 whirlpool_radial_force 180.0
+f32 whirlpool_tangent_force 150.0
+
+f32 glowstick_light_radius 15.0
+f32 glowstick_light_intensity 5.0
+
+f32 atmosphere_factor 1.0
+f32 mesh_moon_distance 500.0
+f32 mesh_moon_scale 0.05
+f32 mesh_moon_dither 1.0
+
+vec3 atmosphere_pos 0.0, 0.0, 0.0
+vec2 atmosphere_radius_inner_outer 1.0, 1.2
+f32 atmosphere_density_falloff 8.0
+vec3 atmosphere_light_direction 0.0, 0.0, 1.0
+vec3 atmosphere_light_coefficients 1.0, 2.0, 4.0
+vec3 atmosphere_color_adjust 0.4, 0.6, 0.8
+
+f32 fishing_net_opacity 1.9
+f32 fishing_net_bias -1.0
+f32 fishing_net_impulse_vel_scale 1.0
+f32 fishing_net_impulse_max 500.0
+
+f32 fishing_cast_force 60.0
+f32 fishing_rope_force 60.0
+f32 fishing_line_mass 1.0
+f32 fishing_line_default 1.0
+f32 cast_line_length 30.0
+f32 cast_spool_speed 0.01
+
+f32 fishing_catch_force_easy 0.5
+f32 fishing_catch_force_hard 1.2
+f32 fishing_catch_force_blend_easy 0.01
+f32 fishing_catch_force_blend_hard 0.05
+s32 fishing_catch_ticks_easy 3600
+s32 fishing_catch_ticks_hard 1800
+

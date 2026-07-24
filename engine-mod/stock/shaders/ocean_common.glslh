@@ -1,0 +1,58 @@
+//const float pi = 3.14159265;
+
+float get_height_scale_from_world(sampler2D texture_wave_height_scale, vec3 world_position, vec3 world_offset, float world_to_texture_scale)
+{
+	vec2 wave_height_coords = (world_position.xz - world_offset.xz) * world_to_texture_scale + vec2(0.5, 0.5);
+	return texture(texture_wave_height_scale, wave_height_coords).x;
+}
+
+float get_height_scale_from_camera_dist(vec3 world_position, vec3 camera_position)
+{
+	float camera_dist = length(world_position - camera_position);
+	const float min_scale_dist = 500.0;
+	const float max_scale_dist = 2500.0;
+	camera_dist = clamp((camera_dist - min_scale_dist) / max_scale_dist, 0.0, 1.0);
+	return 1.0 - camera_dist;
+}
+
+vec2 rotate(vec2 v, float angle)
+{
+    vec2 Result = v;
+    float Cos = cos(angle);
+    float Sin = sin(angle);
+    Result.x = v.x * Cos - v.y * Sin;
+    Result.y = v.x * Sin + v.y * Cos;
+    return Result;
+}
+
+vec3 get_gerstner_wave_offset(vec3 world_position, vec3 wave_origin, float time, float wave_magnitude, float whirlpool_factor, out vec3 normal)
+{
+	vec2 offset = (world_position.xz - wave_origin.xz);
+	float offset_magnitude = length(offset);
+	vec2 offset_dir = normalize(offset);
+
+	float wave_phase = (dot(offset_dir, offset) * 0.01) - (time * 0.2 * (1.0 - whirlpool_factor));
+
+	float swirl_factor = (1.0 + cos(clamp(wave_phase * 0.5, -3.14159265, 3.14159265))) * 0.5 * wave_magnitude * whirlpool_factor;  //Cosine falloff
+	float swirl_angle = (swirl_factor * 500.0) / (offset_magnitude + 50.0); //Constant arc-distance for increasing radius
+
+	vec2 offset_dir_rotated = rotate(offset_dir, swirl_angle);
+	vec2 delta_offset = (offset_dir_rotated * offset_magnitude) - offset;
+
+	if(wave_phase < -3.14159265 || wave_phase > 3.14159265)
+	{
+		normal = vec3(0.0, 0.0, 0.0);
+		return vec3(delta_offset.x, 0.0, delta_offset.y);
+	}
+
+	float wave_cos = cos(wave_phase);
+	float wave_sin = sin(-wave_phase);
+
+	float wave_polarity = 1.0 - (whirlpool_factor * 2.0);
+
+	float curve_factor = 1.0 - (0.67 * whirlpool_factor);
+	float curve  = curve_factor / ((wave_phase * wave_phase) + curve_factor) - (curve_factor * 0.1);
+	
+	normal = vec3(-offset_dir_rotated.x / (offset_magnitude * offset_magnitude), 0.0, -offset_dir_rotated.y / (offset_magnitude * offset_magnitude)) * wave_magnitude;
+	return vec3(delta_offset.x, 0.0, delta_offset.y) + vec3(0.f, curve * 100.0 * wave_magnitude * wave_polarity, 0.f);
+}

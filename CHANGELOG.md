@@ -1,5 +1,10 @@
 ﻿# StormPower Changelog
 
+## 1.5.5
+- Vehicle Boost rewritten as hard warp pulses (setGroupPos / setVehiclePos) — soft moveVehicle cannot beat ship physics
+- Tsunami API magnitude raised (4–5) for taller gerstner waves
+- NEW: engine-mod patches Stormworks ocean shaders for ~4x rogue-wave height (INSTALL_MEGA_WAVES.bat)
+
 ## 1.5.4
 - Vehicle Boost: real local-forward shove (no more sliding in the seat). Auto-picks ship facing; `?boost flip` if reversed
 
