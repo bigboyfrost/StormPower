@@ -215,7 +215,7 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
     const peer = Math.max(0, Math.floor(Number(s.peer) || 0));
     const count = Math.max(1, Math.floor(Number(s.count) || 1));
     const size = Math.max(0.5, Number(s.size) || 1);
-    const dist = Math.max(1, Math.floor(Number(s.dist) || 20));
+    const dist = Math.max(1, Math.min(5000, Math.floor(Number(s.dist) || 20)));
 
     switch (item.cmd) {
       case "spawn_animal":

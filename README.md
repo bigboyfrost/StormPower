@@ -1,56 +1,59 @@
 # StormPower
 **By Aimless Developement**
 
-External Apple-style spawn overlay for *Stormworks: Build and Rescue*.  
-Toggle with **F4** — the game keeps focus (no tabbing out). Arrow keys are captured globally while the menu is open.
+External Apple-style spawn menu for *Stormworks: Build and Rescue*.
 
 ## Features
 
-- Focus-free overlay (622×800, locked size)
-- Spawn animals, creatures, objects at a **configurable distance**
-- Weapons / equipment / outfits into inventory
-- **StormPower wind boost** (2×–10×) — pushes past the stock weather slider (0–1) and re-applies every tick
-- Auto-updater for friends (`update.bat`)
-- Easy share via GitHub
+- Locked **622×800** overlay, pinned to the **top** of the screen (left or right)
+- Always-on **SP** toggle button (click to show/hide — no keybinds required)
+- Spawn distance **1–5000 m**
+- Weapons, animals, creatures, weather/wind boost, disasters
+- Chat commands when you prefer typing (`?sp`)
+- Auto-updater (`update.bat`)
 
-## Fullscreen
-
-Exclusive fullscreen cannot draw an external window on top of Stormworks. StormPower solves this by **mirroring the menu inside the game** with on-screen popups:
-
-- Press **F4** / **Insert** / **F8** (captured globally)
-- The HUD on the left of your screen updates as you move with arrow keys
-- Enter selects, Backspace goes back
-
-Windowed / borderless still shows the Apple-style overlay + floating **SP** toggle button.
+## Quick start
 
 1. Install [Node.js LTS](https://nodejs.org/)
 2. Run `install.bat`
 3. Run `start.bat`
-4. In Stormworks, enable the **StormPower** addon on your save
-5. Press **F4** in-game
+4. Enable addon **StormPower** in your Stormworks save
+5. Click the floating **SP** button to open/close the menu
 
-### Controls
+> Tip: For best overlay visibility use **Borderless Window**. Exclusive fullscreen hides other windows; use chat commands there.
 
-| Key | Action |
+## Chat commands
+
+| Command | Example |
 |---|---|
-| F4 | Show / hide (game stays focused) |
-| ↑ ↓ | Move |
-| Enter / → | Select |
-| Backspace / Esc / ← | Back |
-| 1–9 | Jump to item |
+| `?sp` | Help |
+| `?dist <m>` | `?dist 2500` (1–5000) |
+| `?count <n>` | `?count 10` |
+| `?size <n>` | `?size 2` |
+| `?shark [n] [size] [dist]` | `?shark 5 1 100` |
+| `?whale …` / `?kraken …` | |
+| `?give pistol\|smg\|rifle\|grenade\|c4\|spear\|aid` | `?give rifle` |
+| `?outfit scuba\|diving\|armor\|arctic` | |
+| `?loadout` `?heal` `?money` `?cleanup` | |
+| `?wind <0-10>` | `?wind 5` (0 = off) |
 
-**Quick Setup** sliders at the top: Spawn distance, Amount, Scale, Peer ID.
+## Overlay controls
 
-## Sharing with friends
+- **SP button** — always on screen, show/hide menu
+- **Back** button in the menu
+- Mouse click any list item
+- Left/Right side setting in Quick Setup
 
-1. They clone/download this repo
-2. Run `install.bat` then `start.bat`
-3. Host enables **StormPower** on the save
-4. Later: `update.bat` pulls the latest release
+## Sharing
 
-## Wind boost note
+```text
+git clone https://github.com/bigboyfrost/StormPower.git
+cd StormPower
+install.bat
+start.bat
+```
 
-Stormworks documents `server.setWeather` wind as `0–1`. StormPower intentionally sends higher values (up to 10) and refreshes them every tick so the game cannot ease wind back to stock. Exact in-world strength depends on the game build; 2×–5× is the practical sweet spot.
+Friends can later run `update.bat`.
 
 ## License
 

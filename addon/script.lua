@@ -1,7 +1,6 @@
 -- StormPower by Aimless Developement
--- Bridge: http://127.0.0.1:21773
--- /sw/poll  = spawn commands
--- /sw/ui    = fullscreen-safe on-screen menu mirror
+-- Bridge: http://127.0.0.1:21773/sw/poll
+-- Chat commands also work (see ?sp)
 
 g_savedata = {
 	require_admin = property.checkbox("Require admin", false),
@@ -15,10 +14,12 @@ local wind_boost = 0
 local weather_fog = 0
 local weather_rain = 0
 
-local UI_TITLE = 91001
-local UI_BODY = 91002
-local last_ui_text = ""
-local menu_open = false
+-- Session defaults for chat commands
+local session = {
+	count = 5,
+	size = 1,
+	dist = 20,
+}
 
 local function announce(peer_id, msg)
 	server.announce("StormPower", msg, peer_id or -1)
@@ -96,34 +97,14 @@ local function setWeatherState(fog, rain, wind)
 	end
 end
 
-local function drawInGameUI(text, open)
-	menu_open = open
-	local players = server.getPlayers()
-	for i = 1, #players do
-		local peer = players[i].id
-		if open then
-			server.setPopupScreen(peer, UI_TITLE, "sp_title", true, "StormPower", -0.82, -0.72)
-			server.setPopupScreen(peer, UI_BODY, "sp_body", true, text, -0.82, -0.20)
-		else
-			-- Tiny always-on hint so fullscreen users know F4 works
-			server.setPopupScreen(peer, UI_TITLE, "sp_title", true, "SP [F4]", -0.90, -0.85)
-			server.removePopup(peer, UI_BODY)
-		end
-	end
-end
-
-local function hideInGameUI()
-	local players = server.getPlayers()
-	for i = 1, #players do
-		server.removePopup(players[i].id, UI_TITLE)
-		server.removePopup(players[i].id, UI_BODY)
-	end
-end
-
 local function runCommand(line)
 	if not line or line == "" or line == "NONE" then return end
 	if string.find(line, "connect()", 1, true) or string.find(line, "Connection refused", 1, true) then
 		return
+	end
+	-- Ignore legacy multiplex UI payloads if any
+	if string.find(line, "\n---\n", 1, true) then
+		line = string.match(line, "^(.-)\n%-%-%-") or line
 	end
 
 	local p = split(line, "|")
@@ -134,7 +115,7 @@ local function runCommand(line)
 		local id = math.floor(num(p[3], 0))
 		local count = math.max(1, math.floor(num(p[4], 1)))
 		local size = math.max(0.1, num(p[5], 1))
-		local dist = math.max(1, num(p[6], 20))
+		local dist = math.max(1, math.min(5000, num(p[6], 20)))
 		local n = 0
 		for i = 1, count do
 			local mat = frontMatrix(peer_id, dist + (i - 1) * 4, -2)
@@ -149,7 +130,7 @@ local function runCommand(line)
 		local id = math.floor(num(p[3], 0))
 		local count = math.max(1, math.floor(num(p[4], 1)))
 		local size = math.max(0.1, num(p[5], 1))
-		local dist = math.max(1, num(p[6], 20))
+		local dist = math.max(1, math.min(5000, num(p[6], 20)))
 		local n = 0
 		for i = 1, count do
 			local mat = frontMatrix(peer_id, dist + (i - 1) * 3, 0)
@@ -167,7 +148,7 @@ local function runCommand(line)
 	elseif cmd == "spawn_object" then
 		local id = math.floor(num(p[3], 2))
 		local count = math.max(1, math.floor(num(p[4], 1)))
-		local dist = math.max(1, num(p[5], 20))
+		local dist = math.max(1, math.min(5000, num(p[5], 20)))
 		local n = 0
 		for i = 1, count do
 			local mat = frontMatrix(peer_id, dist + (i - 1) * 2, 1)
@@ -215,7 +196,7 @@ local function runCommand(line)
 
 	elseif cmd == "disaster" then
 		local kind = p[3] or "tsunami"
-		local dist = math.max(40, num(p[4], 80))
+		local dist = math.max(40, math.min(5000, num(p[4], 80)))
 		local mat = frontMatrix(peer_id, dist, 0)
 		if mat then
 			if kind == "tsunami" then server.spawnTsunami(mat, 0.7)
@@ -246,7 +227,6 @@ local function runCommand(line)
 			wind_boost = wind
 			server.setWeather(weather_fog, weather_rain, wind_boost)
 			notify(peer_id, "Wind boost " .. tostring(wind) .. "x")
-			announce(peer_id, "StormPower wind boost " .. tostring(wind) .. "x (above stock 1.0)")
 		end
 
 	elseif cmd == "heal" then
@@ -296,54 +276,52 @@ local function runCommand(line)
 	end
 end
 
-local function handleUiReply(reply)
-	if not reply or reply == "" then return end
-	if string.find(reply, "connect()", 1, true) or string.find(reply, "Connection refused", 1, true) then
-		return
-	end
-	local open_flag, text = string.match(reply, "^(%d+)\n([%s%S]*)")
-	if not open_flag then
-		open_flag = "0"
-		text = reply
-	end
-	local open = open_flag == "1"
-	if text ~= last_ui_text or open ~= menu_open then
-		last_ui_text = text
-		drawInGameUI(text or "", open)
-	end
+local function help(peer_id)
+	announce(peer_id, "=== StormPower Commands ===")
+	announce(peer_id, "?sp                 This help")
+	announce(peer_id, "?dist <m>           Set spawn distance (1-5000)")
+	announce(peer_id, "?count <n>          Set spawn amount")
+	announce(peer_id, "?size <n>           Set scale")
+	announce(peer_id, "?shark [n] [size] [dist]")
+	announce(peer_id, "?whale [n] [size] [dist]")
+	announce(peer_id, "?kraken [n] [size] [dist]")
+	announce(peer_id, "?give pistol|smg|rifle|grenade|c4|spear|aid")
+	announce(peer_id, "?loadout  ?heal  ?money  ?cleanup")
+	announce(peer_id, "?wind <0-10>        0=off, 1=stock max, 2-10=boost")
+	announce(peer_id, "?outfit scuba|diving|armor|arctic")
+	announce(peer_id, "Overlay: click the always-on SP button to show/hide menu")
 end
 
-local function handlePollReply(reply)
-	if not reply or reply == "" then return end
-	if string.find(reply, "connect()", 1, true) or string.find(reply, "Connection refused", 1, true) then
-		return
-	end
-	-- New multiplex format: CMD\n---\nOPEN\nUI...
-	local cmd, rest = string.match(reply, "^(.-)\n%-%-%-\n([%s%S]*)")
-	if cmd then
-		runCommand(cmd)
-		handleUiReply(rest)
-		return
-	end
-	-- Legacy: plain command only
-	runCommand(reply)
-end
+local GIVE = {
+	pistol = { 35, 1, 17, 0 },
+	smg = { 37, 1, 30, 0 },
+	rifle = { 39, 1, 10, 0 },
+	grenade = { 41, 2, 3, 0 },
+	c4 = { 31, 2, 4, 0 },
+	spear = { 33, 1, 5, 0 },
+	aid = { 11, 2, 4, 0 },
+	flashlight = { 15, 2, 0, 100 },
+}
+
+local OUTFITS = {
+	diving = 1,
+	firefighter = 2,
+	scuba = 3,
+	parachute = 4,
+	arctic = 5,
+	hazmat = 29,
+	armor = 78,
+}
 
 function onCreate(is_world_create)
 	spawned = {}
 	wind_boost = 0
 	tick_counter = 0
-	announce(-1, "StormPower online. F4 opens menu (fullscreen uses on-screen HUD).")
-end
-
-function onDestroy()
-	hideInGameUI()
+	announce(-1, "StormPower ready. Type ?sp for commands. Use the SP overlay button to open the menu.")
 end
 
 function onTick(game_ticks)
-	local gt = game_ticks or 1
-	tick_counter = tick_counter + gt
-
+	tick_counter = tick_counter + (game_ticks or 1)
 	if tick_counter >= POLL_EVERY then
 		tick_counter = 0
 		server.httpGet(PORT, "/sw/poll")
@@ -354,16 +332,73 @@ function onTick(game_ticks)
 end
 
 function httpReply(port, request, reply)
-	if port ~= PORT then return end
-	if request == "/sw/poll" then
-		handlePollReply(reply)
-	elseif request == "/sw/ui" then
-		handleUiReply(reply)
+	if port == PORT and request == "/sw/poll" then
+		runCommand(reply)
 	end
 end
 
 function onCustomCommand(full_message, peer_id, is_admin, is_auth, command, ...)
-	if string.lower(command or "") == "?stormpower" then
-		announce(peer_id, "StormPower by Aimless Developement — F4 / Insert / F8. Fullscreen uses on-screen HUD.")
+	local args = { ... }
+	command = string.lower(command or "")
+
+	local function aNum(i, default)
+		return num(args[i], default)
+	end
+
+	if command == "?sp" or command == "?stormpower" or command == "?sphelp" then
+		help(peer_id)
+		return
+	end
+
+	if command == "?dist" or command == "?distance" then
+		session.dist = math.max(1, math.min(5000, math.floor(aNum(1, session.dist))))
+		announce(peer_id, "Spawn distance = " .. session.dist .. "m")
+		return
+	end
+	if command == "?count" then
+		session.count = math.max(1, math.min(50, math.floor(aNum(1, session.count))))
+		announce(peer_id, "Spawn count = " .. session.count)
+		return
+	end
+	if command == "?size" then
+		session.size = math.max(0.1, math.min(20, aNum(1, session.size)))
+		announce(peer_id, "Spawn size = " .. session.size)
+		return
+	end
+
+	if command == "?shark" then
+		runCommand(string.format("spawn_animal|%d|0|%d|%s|%s", peer_id, math.floor(aNum(1, session.count)), aNum(2, session.size), aNum(3, session.dist)))
+	elseif command == "?whale" then
+		runCommand(string.format("spawn_animal|%d|1|%d|%s|%s", peer_id, math.floor(aNum(1, session.count)), aNum(2, session.size), aNum(3, session.dist)))
+	elseif command == "?kraken" then
+		runCommand(string.format("spawn_animal|%d|4|%d|%s|%s", peer_id, math.floor(aNum(1, session.count)), aNum(2, session.size), aNum(3, session.dist)))
+	elseif command == "?give" then
+		local name = string.lower(tostring(args[1] or ""))
+		local g = GIVE[name]
+		if not g then
+			announce(peer_id, "Usage: ?give pistol|smg|rifle|grenade|c4|spear|aid|flashlight")
+			return
+		end
+		runCommand(string.format("give|%d|%d|%d|%d|%s", peer_id, g[1], g[2], g[3], g[4]))
+		if name == "c4" then runCommand("c4_kit|" .. peer_id) end
+		if name == "spear" then runCommand("spear_kit|" .. peer_id) end
+	elseif command == "?outfit" then
+		local name = string.lower(tostring(args[1] or ""))
+		local id = OUTFITS[name]
+		if not id then
+			announce(peer_id, "Usage: ?outfit scuba|diving|armor|arctic|hazmat")
+			return
+		end
+		runCommand(string.format("outfit|%d|%d", peer_id, id))
+	elseif command == "?loadout" then
+		runCommand("loadout|" .. peer_id)
+	elseif command == "?heal" then
+		runCommand("heal|" .. peer_id)
+	elseif command == "?money" then
+		runCommand("money|" .. peer_id)
+	elseif command == "?cleanup" then
+		runCommand("cleanup|" .. peer_id)
+	elseif command == "?wind" then
+		runCommand(string.format("wind_boost|%d|%s", peer_id, aNum(1, 0)))
 	end
 end

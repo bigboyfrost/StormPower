@@ -18,8 +18,8 @@ const { createMenuEngine } = require("./menuEngine");
 const PORT = 21773;
 const WIN_W = 622;
 const WIN_H = 800;
-const TOGGLE_W = 52;
-const TOGGLE_H = 52;
+const TOGGLE_W = 64;
+const TOGGLE_H = 64;
 
 let mainWindow = null;
 let toggleWindow = null;
@@ -53,10 +53,12 @@ function sendToggle(channel, payload) {
 function placeWindows(side) {
   const display = screen.getPrimaryDisplay().workArea;
   const isRight = side === "right";
-  const mainX = isRight ? display.x + display.width - WIN_W - 24 : display.x + 24;
-  const mainY = display.y + Math.max(20, Math.floor((display.height - WIN_H) / 2));
-  const toggleX = isRight ? display.x + display.width - TOGGLE_W - 12 : display.x + 12;
-  const toggleY = display.y + Math.floor(display.height / 2) - TOGGLE_H / 2;
+  // Always-on SP button at the very top corner
+  const toggleX = isRight ? display.x + display.width - TOGGLE_W - 10 : display.x + 10;
+  const toggleY = display.y + 8;
+  // Menu top-aligned, directly under the toggle so the button stays visible
+  const mainX = isRight ? display.x + display.width - WIN_W - 16 : display.x + 16;
+  const mainY = display.y + 8 + TOGGLE_H + 6;
 
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setBounds({ x: mainX, y: mainY, width: WIN_W, height: WIN_H });
@@ -93,8 +95,12 @@ function showToggleAlways() {
   if (!toggleWindow) return;
   placeWindows(menu.settings.side);
   toggleWindow.setAlwaysOnTop(true, "screen-saver");
+  toggleWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  toggleWindow.setSkipTaskbar(true);
   toggleWindow.setFocusable(true);
-  toggleWindow.showInactive();
+  // Never auto-hide — this is the primary open/close control
+  if (!toggleWindow.isVisible()) toggleWindow.show();
+  else toggleWindow.showInactive();
   toggleWindow.moveTop();
 }
 
@@ -113,21 +119,11 @@ function createHttpBridge() {
     lastStatus.connected = true;
     lastStatus.lastPoll = Date.now();
     sendMain("bridge-status", lastStatus);
-    // Multiplex command + fullscreen UI in one reply (Stormworks allows ~1 httpGet / 2 ticks)
-    const cmd = commandQueue.length ? commandQueue.shift() : "NONE";
-    const open = menu && menu.open ? "1" : "0";
-    const ui = menu ? menu.getInGameText() : "StormPower";
-    const body = cmd + "\n---\n" + open + "\n" + String(ui).replace(/\r/g, "").slice(0, 800);
-    res.type("text/plain").send(body);
-  });
-
-  // Kept for compatibility
-  api.get("/sw/ui", (_req, res) => {
-    lastStatus.connected = true;
-    lastStatus.lastPoll = Date.now();
-    const open = menu ? (menu.open ? 1 : 0) : 0;
-    const text = menu ? menu.getInGameText() : "StormPower";
-    res.type("text/plain").send(open + "\n" + String(text).replace(/\r/g, "").slice(0, 900));
+    if (!commandQueue.length) {
+      res.type("text/plain").send("NONE");
+      return;
+    }
+    res.type("text/plain").send(commandQueue.shift());
   });
 
   api.get("/sw/ping", (_req, res) => res.type("text/plain").send("OK"));
@@ -348,8 +344,16 @@ app.whenReady().then(async () => {
 
   placeWindows(menu.settings.side);
   showToggleAlways();
+  // Keep the toggle pinned above other windows
+  setInterval(() => {
+    if (toggleWindow && !toggleWindow.isDestroyed()) {
+      toggleWindow.setAlwaysOnTop(true, "screen-saver");
+      if (!toggleWindow.isVisible()) toggleWindow.showInactive();
+      toggleWindow.moveTop();
+    }
+  }, 2000);
 
-  // Start with menu open so user sees it immediately
+  // Start with menu open so first-run is obvious; SP button always stays
   menu.setOpen(true);
 
   try {

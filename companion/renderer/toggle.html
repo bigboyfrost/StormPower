@@ -2,47 +2,65 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>SP</title>
+  <title>SP Toggle</title>
   <style>
     html, body {
       margin: 0;
-      width: 52px;
-      height: 52px;
+      width: 64px;
+      height: 64px;
       overflow: hidden;
       background: transparent;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-app-region: no-drag;
     }
     button {
-      width: 48px;
-      height: 48px;
+      width: 60px;
+      height: 60px;
       margin: 2px;
-      border: none;
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.92);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      border: 2px solid rgba(0, 122, 255, 0.45);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
       color: #007aff;
       font-weight: 800;
-      font-size: 13px;
+      font-size: 14px;
       letter-spacing: -0.02em;
       cursor: pointer;
-      backdrop-filter: blur(12px);
+      backdrop-filter: blur(14px);
     }
+    button:hover { transform: scale(1.04); }
     button.open {
       background: #007aff;
       color: #fff;
+      border-color: #007aff;
+    }
+    button span {
+      display: block;
+      font-size: 9px;
+      font-weight: 600;
+      opacity: 0.85;
+      margin-top: 2px;
     }
   </style>
 </head>
 <body>
-  <button id="btn" type="button" title="Toggle StormPower">SP</button>
+  <button id="btn" type="button" title="Show / hide StormPower menu">
+    SP
+    <span id="hint">show</span>
+  </button>
   <script>
     const btn = document.getElementById("btn");
-    btn.addEventListener("click", () => {
+    const hint = document.getElementById("hint");
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       if (window.stormpower) window.stormpower.toggleMenu();
     });
     if (window.stormpower) {
       window.stormpower.onState((s) => {
-        btn.classList.toggle("open", !!s.open);
+        const open = !!s.open;
+        btn.classList.toggle("open", open);
+        hint.textContent = open ? "hide" : "show";
       });
     }
   </script>
