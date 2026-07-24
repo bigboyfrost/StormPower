@@ -1,5 +1,12 @@
 ﻿# StormPower Changelog
 
+## 1.5.8
+- Mega Wave Engine softened (stock wavelength, ~45% crest height) — stops ocean bounce / boat levitation
+- Wave pulses no longer cancel/respawn-strobe; lower tsunami magnitudes
+- Engine Boost feeds nearby engines (fuel/throttle) instead of teleporting you out of the seat
+- In-game update notify waits for Stormworks bridge and re-sends without opening the menu
+- Menu reorganized: Home → Toggles / Spawns / Gear / World / Player / Settings with many more toggles
+
 ## 1.5.7
 - Ultra Waves no longer use x50 wind / whirlpool / meteor spam (that was chaos, not waves)
 - Tall seas come from tsunami magnitude + Mega Wave Engine ocean shader only

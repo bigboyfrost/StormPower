@@ -111,7 +111,7 @@ function install() {
   return {
     ok: true,
     installed: true,
-    message: "Mega-wave engine ON — restart Stormworks to apply",
+    message: "Mega-wave engine ON (~45% taller crests) — restart Stormworks",
     stormworks: status.stormworks,
   };
 }

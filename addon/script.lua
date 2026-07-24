@@ -20,16 +20,17 @@ local tsunami_timer = 0
 local tsunami_phase = 0 -- 0 wait, 1 just cancelled (spawn next)
 local wave_dist = 150
 local wave_peer = 0
-local wave_pulse = 0 -- rotates spawn distance / event type for bigger-than-stock feel
-local TSUNAMI_INTERVAL_NORMAL = 90
-local TSUNAMI_INTERVAL_ULTRA = 70
--- Tall gerstner waves need time to exist — do not strobe-cancel into chaos
-local TSUNAMI_INTERVAL_IMPOSSIBLE = 80
+local wave_pulse = 0 -- slight distance variation between crests
+local TSUNAMI_INTERVAL_NORMAL = 160
+local TSUNAMI_INTERVAL_ULTRA = 180
+-- Long-lived crests — no cancel/respawn strobe (that bounced the whole sea)
+local TSUNAMI_INTERVAL_IMPOSSIBLE = 200
 local sirens_muted = true
 local tracked_sirens = {}
 local siren_refresh = 0
 local siren_scan = 0
 local siren_scan_id = 1
+local known_vehicles = {}
 
 -- Chaos Mode: timed assault that tries to kill the player (rate-limited)
 local chaos = {
@@ -39,18 +40,18 @@ local chaos = {
 	step = 0,
 }
 
--- Vehicle boost table
+-- Engine Boost: keep nearby engines fed + force throttle (no teleports)
 local boost = {
 	active = false,
 	peer = 0,
-	knots = 40,
 	accum = 0,
-	-- Hard teleport pulses (setVehiclePos / setGroupPos). Soft moveVehicle is ignored by physics on ships.
-	interval = 12, -- ~5 Hz warps
+	interval = 8,
 	sign = 1,
 	seat_name = nil,
 	vehicle = 0,
-	meters_per_pulse = 18, -- ~35 kn average at 5 Hz
+	radius = 80, -- meters: boost engines on nearby craft too
+	saved_fuel = false,
+	saved_overheat = false,
 }
 
 local session = {
@@ -293,16 +294,15 @@ local function spawnMegaWaveNear(peer_id, dist)
 	if not mat then
 		return false
 	end
-	-- Magnitude >1 scales gerstner height in the ocean shader
-	server.spawnTsunami(mat, 4.0)
+	-- Mild magnitude — Mega Wave Engine shader adds the rest. High values + shader = levitation.
+	server.spawnTsunami(mat, 1.35)
 	if sirens_muted then
 		silenceSirens()
 	end
 	return true
 end
 
--- Mode 4: tall tsunamis only. Height comes from Mega Wave Engine (ocean shader),
--- not from wind multipliers / whirlpools / meteors (those turn seas into chaos).
+-- Mode 4: tall tsunami only (no whirlpools/meteors/wind). Height from mild engine shader.
 local function spawnImpossibleWave(peer_id, dist)
 	dist = math.max(80, dist or wave_dist or 150)
 	wave_dist = dist
@@ -316,19 +316,14 @@ local function spawnImpossibleWave(peer_id, dist)
 	d = math.max(80, math.min(5000, d))
 	local mat = waveMatrix(peer_id, d, 0)
 	if not mat then return false end
-	server.spawnTsunami(mat, 5.0)
+	server.spawnTsunami(mat, 1.65)
 	if sirens_muted then silenceSirens() end
 	return true
 end
 
 local function pulseWaveCycle(peer_id)
-	-- Despawn then respawn to simulate continuous wave crests (engine: 1 gerstner max)
-	if tsunami_phase == 0 then
-		server.cancelGerstner()
-		tsunami_phase = 1
-		return
-	end
-	tsunami_phase = 0
+	-- Full interval refresh only (no half-tick cancel strobe — that bounced the ocean)
+	server.cancelGerstner()
 	if sea_mode >= 4 then
 		spawnImpossibleWave(peer_id, wave_dist)
 	else
@@ -352,98 +347,192 @@ local function getVehicleGroupId(vehicle_id)
 	return nil
 end
 
-local function findSeatName(peer_id, vehicle_id)
+local function vehicleParts(vehicle_id)
 	if not server.getVehicleComponents then return nil end
-	local comps, ok = server.getVehicleComponents(vehicle_id)
-	if not ok or not comps or not comps.seats then return nil end
+	local data, ok = server.getVehicleComponents(vehicle_id)
+	if not ok or not data then return nil end
+	return data.components or data
+end
+
+local function findSeatName(peer_id, vehicle_id)
+	local parts = vehicleParts(vehicle_id)
+	if not parts or not parts.seats then return nil end
 	local char_id = getCharacter(peer_id)
-	for _, seat in pairs(comps.seats) do
+	for _, seat in pairs(parts.seats) do
 		if seat and seat.name and seat.name ~= "" then
 			if seat.seated_peer_id == peer_id then return seat.name end
 			if char_id and seat.seated_id == char_id then return seat.name end
 		end
 	end
-	for _, seat in pairs(comps.seats) do
+	for _, seat in pairs(parts.seats) do
 		if seat and seat.name and seat.name ~= "" then return seat.name end
 	end
 	return nil
 end
 
-local function pickBoostSign(peer_id, mat)
-	local ox, oy, oz = matrix.position(mat)
-	local function worldFlat(local_z)
-		local p = matrix.multiply(mat, matrix.translation(0, 0, local_z))
-		local x, y, z = matrix.position(p)
-		local dx, dz = x - ox, z - oz
-		local len = math.sqrt(dx * dx + dz * dz)
-		if len < 0.001 then return 0, 0 end
-		return dx / len, dz / len
-	end
-	local fx, fz = worldFlat(1)
-	local bx, bz = worldFlat(-1)
-	local wx, wz = lookFlat(peer_id)
-	local lx, ly, lz, lok = server.getPlayerLookDirection(peer_id)
-	if lok and matrix.multiplyXYZW then
-		local tx, ty, tz = matrix.multiplyXYZW(mat, lx, ly, lz, 0)
-		local len = math.sqrt(tx * tx + tz * tz)
-		if len > 0.05 then
-			wx, wz = tx / len, tz / len
+local function nameLooksLikeThrottle(name)
+	if not name then return false end
+	local n = string.lower(tostring(name))
+	return string.find(n, "thrott", 1, true)
+		or string.find(n, "engine", 1, true)
+		or string.find(n, "rps", 1, true)
+		or string.find(n, "power", 1, true)
+		or string.find(n, "starter", 1, true)
+		or string.find(n, "ignition", 1, true)
+		or string.find(n, "clutch", 1, true)
+		or string.find(n, "prop", 1, true)
+end
+
+local function feedVehicleEngines(vehicle_id, peer_id)
+	local parts = vehicleParts(vehicle_id)
+	if not parts then return 0 end
+	local n = 0
+
+	if parts.tanks then
+		for _, tank in pairs(parts.tanks) do
+			if tank and tank.name and tank.capacity and tank.capacity > 0 then
+				local ft = tank.fluid_type
+				if ft == nil then ft = 1 end -- diesel default
+				-- Skip water / exhaust / air tanks when type is known
+				if ft ~= 0 and ft ~= 3 and ft ~= 4 and ft ~= 6 then
+					if server.setVehicleTank(vehicle_id, tank.name, tank.capacity, ft) then
+						n = n + 1
+					end
+				end
+			end
 		end
 	end
-	if (bx * wx + bz * wz) > (fx * wx + fz * wz) then return -1 end
-	return 1
+
+	if parts.batteries then
+		for _, bat in pairs(parts.batteries) do
+			if bat and bat.name then
+				server.setVehicleBattery(vehicle_id, bat.name, 1)
+				n = n + 1
+			end
+		end
+	end
+
+	if parts.buttons then
+		for _, btn in pairs(parts.buttons) do
+			if btn and btn.name and nameLooksLikeThrottle(btn.name) then
+				server.pressVehicleButton(vehicle_id, btn.name)
+				n = n + 1
+			end
+		end
+	end
+
+	-- Force full forward throttle on empty seats / AI seats (occupied seat blocks override)
+	if parts.seats and server.setVehicleSeat then
+		local char_id = getCharacter(peer_id)
+		for _, seat in pairs(parts.seats) do
+			if seat and seat.name and seat.name ~= "" then
+				local occupied = (peer_id and seat.seated_peer_id == peer_id)
+					or (char_id and seat.seated_id == char_id)
+				if not occupied then
+					server.setVehicleSeat(vehicle_id, seat.name, 1, 0, 0, 0, false, false, false, false, false, false, false)
+					n = n + 1
+				else
+					-- Still try — some builds accept addon seat overrides
+					server.setVehicleSeat(vehicle_id, seat.name, 1, 0, 0, 0, false, false, false, false, false, false, false)
+				end
+			end
+		end
+	end
+	return n
+end
+
+local function vehiclesNearPlayer(peer_id, radius)
+	local out = {}
+	local pos, pok = server.getPlayerPos(peer_id)
+	if not pok or not pos then return out end
+	local px, py, pz = matrix.position(pos)
+	local r2 = (radius or 80) * (radius or 80)
+	for vid, _ in pairs(known_vehicles) do
+		local mat, ok = server.getVehiclePos(vid)
+		if ok and mat then
+			local x, y, z = matrix.position(mat)
+			local dx, dy, dz = x - px, y - py, z - pz
+			if (dx * dx + dy * dy + dz * dz) <= r2 then
+				out[#out + 1] = vid
+			end
+		else
+			known_vehicles[vid] = nil
+		end
+	end
+	return out
 end
 
 --[[
-  Soft moveVehicle is almost useless on large floating ships — buoyancy/physics
-  snap them back. Hard setVehiclePos / setGroupPos actually relocates the craft.
-  Tradeoff: brief unload/reload hitch each pulse.
+  Engine Boost — no teleports (those eject you from the seat).
+  Feeds fuel/batteries on nearby craft, presses engine/throttle buttons,
+  and forces seat W-axis where the API allows.
 ]]
 local function applyVehicleBoost(peer_id, game_ticks)
-	local vid = getSeatedVehicle(peer_id)
-	if not vid then
-		if boost.active then
-			boost.active = false
-			boost.accum = 0
-			boost.seat_name = nil
-			boost.vehicle = 0
-			notify(peer_id, "Boost OFF (left seat)")
-		end
-		return false
-	end
-
-	boost.vehicle = vid
 	boost.accum = (boost.accum or 0) + math.max(1, game_ticks or 1)
-	if boost.accum < (boost.interval or 12) then
+	if boost.accum < (boost.interval or 8) then
 		return true
 	end
 	boost.accum = 0
 
-	local mat, ok = server.getVehiclePos(vid)
-	if not ok or not mat then return false end
-
-	local meters = boost.meters_per_pulse or 18
-	local sign = boost.sign or 1
-	local target = matrix.multiply(mat, matrix.translation(0, 0, sign * meters))
-
-	local group_id = getVehicleGroupId(vid)
-	if group_id and server.setGroupPos then
-		server.setGroupPos(group_id, target)
-	elseif server.setVehiclePosSafe then
-		server.setVehiclePosSafe(vid, target)
-	elseif server.setVehiclePos then
-		server.setVehiclePos(vid, target)
-	else
-		server.moveVehicle(vid, target)
-	end
-
-	if boost.seat_name and server.setSeated then
-		local char_id = getCharacter(peer_id)
-		if char_id then
-			server.setSeated(char_id, vid, boost.seat_name)
+	local seated = getSeatedVehicle(peer_id)
+	if seated then
+		boost.vehicle = seated
+		if not boost.seat_name then
+			boost.seat_name = findSeatName(peer_id, seated)
 		end
 	end
+
+	local list = vehiclesNearPlayer(peer_id, boost.radius or 80)
+	if seated then
+		local found = false
+		for _, id in ipairs(list) do
+			if id == seated then found = true break end
+		end
+		if not found then list[#list + 1] = seated end
+	end
+
+	if #list == 0 then
+		return false
+	end
+
+	for _, vid in ipairs(list) do
+		feedVehicleEngines(vid, peer_id)
+	end
 	return true
+end
+
+local function startEngineBoost(peer_id)
+	boost.active = true
+	boost.peer = peer_id
+	boost.accum = 0
+	boost.vehicle = getSeatedVehicle(peer_id) or 0
+	boost.seat_name = boost.vehicle ~= 0 and findSeatName(peer_id, boost.vehicle) or nil
+	local gs = server.getGameSettings and server.getGameSettings() or nil
+	boost.saved_fuel = gs and gs.infinite_fuel
+	boost.saved_overheat = gs and gs.engine_overheating
+	server.setGameSetting("infinite_fuel", true)
+	server.setGameSetting("engine_overheating", false)
+	applyVehicleBoost(peer_id, 99)
+	notify(peer_id, "Engine Boost ON")
+	announce(peer_id, "Boosting nearby engines (fuel + throttle). No teleport. Sit in a seat and run your engines.")
+end
+
+local function stopEngineBoost(peer_id, silent)
+	boost.active = false
+	boost.accum = 0
+	boost.seat_name = nil
+	boost.vehicle = 0
+	if boost.saved_fuel ~= nil then
+		server.setGameSetting("infinite_fuel", boost.saved_fuel)
+		boost.saved_fuel = nil
+	end
+	if boost.saved_overheat ~= nil then
+		server.setGameSetting("engine_overheating", boost.saved_overheat)
+		boost.saved_overheat = nil
+	end
+	if not silent then
+		notify(peer_id, "Engine Boost OFF")
+	end
 end
 
 local function stopChaos()
@@ -673,7 +762,7 @@ local function runCommand(line)
 			mat = frontMatrix(peer_id, dist, 0)
 		end
 		if mat then
-			if kind == "tsunami" then server.spawnTsunami(mat, 4.0)
+			if kind == "tsunami" then server.spawnTsunami(mat, 1.5)
 			elseif kind == "whirlpool" then server.spawnWhirlpool(mat, 3.0)
 			elseif kind == "tornado" then server.spawnTornado(mat)
 			elseif kind == "meteor" then server.spawnMeteor(mat, 0.6, false)
@@ -734,7 +823,7 @@ local function runCommand(line)
 				pulseWaveCycle(peer_id)
 				if mode >= 4 then
 					notify(peer_id, "ULTRA WAVES @ " .. math.floor(dist) .. "m")
-					announce(peer_id, "Tall tsunami pulses ahead (no x50 wind). Enable Mega Wave Engine in the menu for real height.")
+					announce(peer_id, "Tall tsunami pulses ahead. Use Toggles → Mega Wave Engine for mild crest height. Restart Stormworks after enabling.")
 				else
 					notify(peer_id, (mode >= 3 and "ULTRA " or "") .. "MASSIVE WAVES @ " .. math.floor(dist) .. "m")
 					announce(peer_id, "Tsunami loop ahead of you at " .. math.floor(dist) .. "m. Sirens muted.")
@@ -767,35 +856,11 @@ local function runCommand(line)
 	elseif cmd == "boost" then
 		local mode = tostring(p[3] or "on")
 		if mode == "off" or mode == "0" or mode == "stop" then
-			boost.active = false
-			boost.accum = 0
-			boost.seat_name = nil
-			boost.vehicle = 0
-			notify(peer_id, "Vehicle boost OFF")
+			stopEngineBoost(peer_id, false)
 		elseif mode == "flip" or mode == "rev" or mode == "reverse" then
-			boost.sign = -((boost.sign or 1))
-			notify(peer_id, "Boost direction flipped")
-			announce(peer_id, "Boost axis sign = " .. tostring(boost.sign) .. " (use if it goes backward)")
+			notify(peer_id, "Engine Boost has no flip — it powers engines, not teleports")
 		else
-			local vid = getSeatedVehicle(peer_id)
-			if not vid then
-				announce(peer_id, "Sit in a vehicle seat first, then enable boost.")
-				notify(peer_id, "Not in a vehicle")
-			else
-				local mat, mok = server.getVehiclePos(vid)
-				boost.active = true
-				boost.peer = peer_id
-				boost.accum = 0
-				boost.vehicle = vid
-				boost.seat_name = findSeatName(peer_id, vid)
-				if mok and mat then
-					boost.sign = pickBoostSign(peer_id, mat)
-				else
-					boost.sign = 1
-				end
-				notify(peer_id, "Boost WARP ON")
-				announce(peer_id, "Vehicle boost uses hard teleports (~18m pulses). Expect a brief hitch. Wrong way: ?boost flip")
-			end
+			startEngineBoost(peer_id)
 		end
 
 	elseif cmd == "notify_update" then
@@ -923,7 +988,7 @@ local function help(peer_id)
 	announce(peer_id, "?boom [0-1] [dist]   Explosion")
 	announce(peer_id, "?wind <0-50>   Wind force only (not wave height)")
 	announce(peer_id, "?chaos / ?chaos off")
-	announce(peer_id, "?boost / ?boost off / ?boost flip   Seat vehicle speed boost")
+	announce(peer_id, "?boost / ?boost off   Nearby engine power boost (no teleport)")
 end
 
 local GIVE = {
@@ -967,11 +1032,9 @@ function onCreate(is_world_create)
 	tick_counter = 0
 	sirens_muted = true
 	tracked_sirens = {}
+	known_vehicles = {}
 	stopChaos()
-	boost.active = false
-	boost.accum = 0
-	boost.seat_name = nil
-	boost.vehicle = 0
+	stopEngineBoost(-1, true)
 	silenceSirens()
 	announce(-1, "StormPower ready. Sirens muted. Type ?sp for commands.")
 end
@@ -1009,10 +1072,8 @@ function onTick(game_ticks)
 		elseif sea_mode >= 3 then
 			interval = TSUNAMI_INTERVAL_ULTRA
 		end
-		local step = math.floor(interval / 2)
-		if step < 8 then step = 8 end
 		tsunami_timer = tsunami_timer + gt
-		if tsunami_timer >= step then
+		if tsunami_timer >= interval then
 			tsunami_timer = 0
 			local peer = wave_peer
 			local players = server.getPlayers()
@@ -1030,7 +1091,7 @@ function onTick(game_ticks)
 		end
 	end
 
-	-- Vehicle boost: +40 knots while seated
+	-- Engine boost: feed nearby engines (no teleport)
 	if boost.active then
 		local peer = resolvePeer(boost.peer)
 		applyVehicleBoost(peer, gt)
@@ -1040,6 +1101,7 @@ function onTick(game_ticks)
 end
 
 function onVehicleLoad(vehicle_id)
+	known_vehicles[vehicle_id] = true
 	local btn, ok = server.getVehicleButton(vehicle_id, "siren_off")
 	if ok and btn then
 		trackSiren(vehicle_id)
@@ -1055,6 +1117,14 @@ function onVehicleLoad(vehicle_id)
 			if sirens_muted then silenceOne(vehicle_id) end
 		end
 	end
+end
+
+function onVehicleUnload(vehicle_id)
+	known_vehicles[vehicle_id] = nil
+end
+
+function onVehicleDespawn(vehicle_id, peer_id)
+	known_vehicles[vehicle_id] = nil
 end
 
 function onSpawnAddonComponent(id, name, type_string, addon_index)

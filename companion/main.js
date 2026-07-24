@@ -33,8 +33,9 @@ const TOGGLE_H = 64;
 const UPDATE_W = 720;
 const UPDATE_H = 640;
 const UPDATE_UI_ONLY = process.argv.includes("--update-ui");
-const UPDATE_POLL_MS = 15 * 60 * 1000; // re-check while running
-const UPDATE_THROTTLE_MS = 60 * 1000;
+const UPDATE_POLL_MS = 2 * 60 * 1000; // check while running
+const UPDATE_THROTTLE_MS = 45 * 1000;
+const UPDATE_INGAME_RESEND_MS = 90 * 1000;
 
 let mainWindow = null;
 let toggleWindow = null;
@@ -47,6 +48,9 @@ let detached = false;
 let cachedUpdateInfo = null;
 let lastUpdateCheckAt = 0;
 let lastInGameUpdateNotify = "";
+let lastInGameUpdateSentAt = 0;
+let pendingInGameUpdateVer = "";
+let bridgeWasConnected = false;
 
 let menu = null;
 
@@ -205,24 +209,40 @@ function onMenuChange(snap) {
   } else hideMainWindow();
 }
 
-function notifyInGameUpdate(info) {
-  const ver = String(info?.latest || "").replace(/^v/i, "");
-  if (!ver || ver === lastInGameUpdateNotify) return;
+function bridgeConnectedRecently() {
+  return lastStatus.lastPoll && Date.now() - lastStatus.lastPoll < 15000;
+}
+
+function notifyInGameUpdate(info, opts = {}) {
+  const force = !!opts.force;
+  const ver = String(info?.latest || pendingInGameUpdateVer || "").replace(/^v/i, "");
+  if (!ver) return;
+  pendingInGameUpdateVer = ver;
+
+  const now = Date.now();
+  if (!force) {
+    if (ver === lastInGameUpdateNotify && now - lastInGameUpdateSentAt < UPDATE_INGAME_RESEND_MS) return;
+    if (!bridgeConnectedRecently()) return; // wait until Stormworks is polling
+  }
+
   lastInGameUpdateNotify = ver;
+  lastInGameUpdateSentAt = now;
   const peer = menu?.settings?.peer ?? 0;
   enqueue(`notify_update|${peer}|${ver}`);
 }
 
 async function pollForUpdates(reason = "poll") {
   const now = Date.now();
-  if (reason !== "startup" && now - lastUpdateCheckAt < UPDATE_THROTTLE_MS) return;
+  if (reason !== "startup" && reason !== "bridge" && now - lastUpdateCheckAt < UPDATE_THROTTLE_MS) return;
   lastUpdateCheckAt = now;
   try {
     const info = await appUpdater.checkForUpdates({ silent: true });
     cachedUpdateInfo = info;
     if (info?.updateAvailable) {
       sendMain("update-available", info);
-      notifyInGameUpdate(info);
+      notifyInGameUpdate(info, { force: reason === "bridge" || reason === "startup" });
+    } else {
+      pendingInGameUpdateVer = "";
     }
   } catch (err) {
     console.error("[StormPower] update check failed:", err?.message || err);
@@ -272,9 +292,20 @@ function createHttpBridge() {
   });
 
   api.get("/sw/poll", (req, res) => {
+    const now = Date.now();
+    const justConnected = !bridgeWasConnected || now - lastStatus.lastPoll > 20000;
     lastStatus.connected = true;
-    lastStatus.lastPoll = Date.now();
+    lastStatus.lastPoll = now;
+    bridgeWasConnected = true;
     sendMain("bridge-status", lastStatus);
+
+    // When the game first connects (or reconnects), push any pending update notify
+    if (justConnected && pendingInGameUpdateVer) {
+      notifyInGameUpdate({ latest: pendingInGameUpdateVer }, { force: true });
+    } else if (pendingInGameUpdateVer && now - lastInGameUpdateSentAt >= UPDATE_INGAME_RESEND_MS) {
+      notifyInGameUpdate({ latest: pendingInGameUpdateVer });
+    }
+
     if (!commandQueue.length) {
       res.type("text/plain").send("NONE");
       return;
@@ -516,14 +547,20 @@ app.whenReady().then(async () => {
     onSideChange: (side) => placeWindows(side),
     onLocalAction: async (action, { on }) => {
       if (action === "engine_mod") {
-        return engineMod.setInstalled(!!on);
+        const res = engineMod.setInstalled(!!on);
+        // Calm seas so an old tall gerstner is not left bouncing the ocean
+        if (res && res.ok) {
+          const peer = menu?.settings?.peer ?? 0;
+          enqueue(`sea|${peer}|0|0|${menu?.settings?.dist || 20}`);
+        }
+        return res;
       }
       if (action === "check_updates") {
         const info = await appUpdater.checkForUpdates({ silent: false });
         cachedUpdateInfo = info;
         if (info?.updateAvailable) {
           sendMain("update-available", info);
-          notifyInGameUpdate(info);
+          notifyInGameUpdate(info, { force: true });
           openUpdateScreen(info);
           return { ok: true, message: info.message || `Update v${info.latest}` };
         }
@@ -536,6 +573,10 @@ app.whenReady().then(async () => {
   try {
     const em = engineMod.isInstalled();
     menu.setToggle("engine_mod", !!em.installed);
+    // Refresh mild shader if an older aggressive patch was left installed
+    if (em.installed) {
+      engineMod.install();
+    }
   } catch (_) {}
 
   createHttpBridge();

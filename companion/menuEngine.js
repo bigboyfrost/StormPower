@@ -42,19 +42,108 @@ const MENU = {
   home: {
     title: "Home",
     items: [
+      { label: "Toggles", sub: "Waves, boost, rules, sirens…", goto: "toggles" },
+      { label: "Spawns", sub: "Animals, creatures, objects", goto: "spawns" },
+      { label: "Gear", sub: "Weapons, tools, outfits", goto: "gear" },
+      { label: "World", sub: "Weather, disasters, explosions", goto: "world" },
+      { label: "Player", sub: "Heal, money, loadout", goto: "player" },
+      { label: "Settings", sub: "Overlay, updates, cleanup", goto: "settings" },
+    ],
+  },
+  spawns: {
+    title: "Spawns",
+    items: [
       { label: "Animals", sub: "Sharks, whales, krakens", goto: "animals" },
       { label: "Creatures", sub: "Wildlife & monsters (DLC)", goto: "creatures" },
+      { label: "World Objects", sub: "Barrels, crates, props", goto: "objects" },
+    ],
+  },
+  gear: {
+    title: "Gear",
+    items: [
       { label: "Weapons & Ammo", sub: "Guns into your inventory", goto: "weapons" },
       { label: "Tools & Equipment", sub: "Meds, torches, radios", goto: "equipment" },
       { label: "Outfits", sub: "Suits and armor", goto: "outfits" },
-      { label: "World Objects", sub: "Barrels, crates, props", goto: "objects" },
-      { label: "Explosions", sub: "Blasts around you (Weapons DLC)", goto: "explosions" },
-      { label: "Weather & Waves", sub: "Ultra wind, massive seas", goto: "weather" },
+    ],
+  },
+  world: {
+    title: "World",
+    items: [
+      { label: "Weather & Waves", sub: "One-shot weather / wave presets", goto: "weather" },
       { label: "Disasters", sub: "Tsunami, tornado, meteor…", goto: "disasters" },
-      { label: "Other", sub: "Chaos Mode, vehicle boost…", goto: "other" },
-      { label: "Player", sub: "Heal, money, loadout", goto: "player" },
-      { label: "Game Rules", sub: "Fuel, damage, no-clip", goto: "rules" },
-      { label: "Overlay Side", sub: "Left or right of the screen", goto: "side" },
+      { label: "Explosions", sub: "Blasts around you (Weapons DLC)", goto: "explosions" },
+    ],
+  },
+  toggles: {
+    title: "Toggles",
+    items: [
+      {
+        label: "Mute Disaster Sirens",
+        sub: "Force warning towers off",
+        toggle: "sirens_muted",
+        cmd: "sirens_toggle",
+      },
+      {
+        label: "Massive Waves",
+        sub: "Tsunami pulse loop at spawn distance",
+        toggle: "massive_waves",
+        cmd: "sea_toggle",
+      },
+      {
+        label: "Ultra Massive Waves",
+        sub: "Taller crests — enable Mega Wave Engine too",
+        toggle: "ultra_waves",
+        cmd: "sea_toggle_ultra",
+      },
+      {
+        label: "Mega Wave Engine",
+        sub: "Mild ocean crest patch (~45%). Restart Stormworks",
+        toggle: "engine_mod",
+        local: "engine_mod",
+      },
+      {
+        label: "Engine Boost",
+        sub: "Feed nearby engines + throttle (no teleport)",
+        toggle: "boost",
+        cmd: "boost_toggle",
+      },
+      {
+        label: "Chaos Mode",
+        sub: "20s apocalypse, then auto-cleans up",
+        toggle: "chaos",
+        cmd: "chaos_toggle",
+      },
+      { label: "Infinite Fuel", toggle: "infinite_fuel", cmd: "setting_toggle", key: "infinite_fuel" },
+      { label: "Infinite Batteries", toggle: "infinite_batteries", cmd: "setting_toggle", key: "infinite_batteries" },
+      { label: "Infinite Ammo", toggle: "infinite_ammo", cmd: "setting_toggle", key: "infinite_ammo" },
+      { label: "No Engine Overheat", toggle: "no_engine_overheat", cmd: "setting_toggle", key: "engine_overheating", invert: true },
+      { label: "No Clip", toggle: "no_clip", cmd: "setting_toggle", key: "no_clip" },
+      { label: "Player Damage", toggle: "player_damage", cmd: "setting_toggle", key: "player_damage", defaultOn: true },
+      { label: "Vehicle Damage", toggle: "vehicle_damage", cmd: "setting_toggle", key: "vehicle_damage", defaultOn: true },
+      { label: "NPC Damage", toggle: "npc_damage", cmd: "setting_toggle", key: "npc_damage", defaultOn: true },
+      { label: "Lightning", toggle: "lightning", cmd: "setting_toggle", key: "lightning" },
+      { label: "Sharks", toggle: "sharks", cmd: "setting_toggle", key: "sharks" },
+      { label: "Fast Travel", toggle: "fast_travel", cmd: "setting_toggle", key: "fast_travel" },
+      { label: "Third Person", toggle: "third_person", cmd: "setting_toggle", key: "third_person" },
+      { label: "Map Show Players", toggle: "map_show_players", cmd: "setting_toggle", key: "map_show_players" },
+      { label: "Map Show Vehicles", toggle: "map_show_vehicles", cmd: "setting_toggle", key: "map_show_vehicles" },
+      {
+        label: "Menu on Right",
+        sub: "Off = left side",
+        toggle: "side_right",
+        cmd: "side_toggle",
+      },
+    ],
+  },
+  settings: {
+    title: "Settings",
+    items: [
+      { label: "Unlock All Islands", cmd: "setting", key: "unlock_all_islands", value: 1 },
+      {
+        label: "Check for Updates",
+        sub: "Look for a new StormPower release",
+        local: "check_updates",
+      },
       { label: "Clean Up Spawns", sub: "Remove StormPower spawns", cmd: "cleanup" },
     ],
   },
@@ -209,70 +298,13 @@ const MENU = {
       { label: "Clear / Calm Seas", sub: "No wind, flat water", cmd: "sea", mode: 0, wind: 0 },
       { label: "Choppy Seas", sub: "Wind 0.72", cmd: "sea", mode: 1, wind: 0.72 },
       { label: "Max Weather Waves", sub: "Wind 1.0 — tallest stock waves", cmd: "sea", mode: 1, wind: 1 },
-      { label: "Ultra Wind x5", sub: "Force only — not used by Ultra Waves", cmd: "ultra_wind", wind: 5 },
-      { label: "Ultra Wind x10", sub: "Force only — not used by Ultra Waves", cmd: "ultra_wind", wind: 10 },
-      { label: "50x Wind", sub: "Chaos shove only — never paired with Ultra Waves", cmd: "ultra_wind", wind: 50 },
-      {
-        label: "Massive Waves",
-        sub: "Tsunami pulse loop at spawn distance",
-        toggle: "massive_waves",
-        cmd: "sea_toggle",
-      },
-      {
-        label: "Ultra Massive Waves",
-        sub: "Tall tsunamis — needs Mega Wave Engine (no x50 wind)",
-        toggle: "ultra_waves",
-        cmd: "sea_toggle_ultra",
-      },
+      { label: "Ultra Wind x5", sub: "Force shove only (not wave height)", cmd: "ultra_wind", wind: 5 },
+      { label: "Ultra Wind x10", sub: "Force shove only", cmd: "ultra_wind", wind: 10 },
+      { label: "50x Wind", sub: "Chaos shove — separate from Ultra Waves", cmd: "ultra_wind", wind: 50 },
       { label: "Spawn One Mega Wave", sub: "Uses spawn distance in front of you", cmd: "mega_wave" },
-      {
-        label: "Mega Wave Engine",
-        sub: "Patch ocean shader height (~4x) — restart Stormworks",
-        toggle: "engine_mod",
-        local: "engine_mod",
-      },
-      {
-        label: "Mute Disaster Sirens",
-        sub: "Force warning towers off",
-        toggle: "sirens_muted",
-        cmd: "sirens_toggle",
-      },
       { label: "Despawn Siren Towers", sub: "Remove towers entirely", cmd: "sirens", mode: "kill" },
       { label: "Heavy Fog", cmd: "weather", fog: 1, rain: 0, wind: 0.2 },
       { label: "Heavy Rain + Wind", cmd: "weather", fog: 0.2, rain: 1, wind: 0.85 },
-    ],
-  },
-  other: {
-    title: "Other",
-    items: [
-      {
-        label: "Chaos Mode",
-        sub: "20s apocalypse, then auto-cleans up",
-        toggle: "chaos",
-        cmd: "chaos_toggle",
-      },
-      {
-        label: "Vehicle Boost",
-        sub: "Warp pulses ~18m (hard teleport)",
-        toggle: "boost",
-        cmd: "boost_toggle",
-      },
-      {
-        label: "Flip Boost Direction",
-        sub: "If boost goes the wrong way",
-        cmd: "boost_flip",
-      },
-      {
-        label: "Mega Wave Engine",
-        sub: "Patch Stormworks ocean shaders (~4x)",
-        toggle: "engine_mod",
-        local: "engine_mod",
-      },
-      {
-        label: "Check for Updates",
-        sub: "Look for a new StormPower release",
-        local: "check_updates",
-      },
     ],
   },
   disasters: {
@@ -295,28 +327,6 @@ const MENU = {
       { label: "Add $100,000", cmd: "money" },
     ],
   },
-  rules: {
-    title: "Game Rules",
-    items: [
-      { label: "Infinite Fuel", toggle: "infinite_fuel", cmd: "setting_toggle", key: "infinite_fuel" },
-      { label: "Infinite Batteries", toggle: "infinite_batteries", cmd: "setting_toggle", key: "infinite_batteries" },
-      { label: "No Clip", toggle: "no_clip", cmd: "setting_toggle", key: "no_clip" },
-      { label: "Player Damage", toggle: "player_damage", cmd: "setting_toggle", key: "player_damage", defaultOn: true },
-      { label: "Vehicle Damage", toggle: "vehicle_damage", cmd: "setting_toggle", key: "vehicle_damage", defaultOn: true },
-      { label: "Unlock All Islands", cmd: "setting", key: "unlock_all_islands", value: 1 },
-    ],
-  },
-  side: {
-    title: "Overlay Side",
-    items: [
-      {
-        label: "Menu on Right",
-        sub: "Off = left side",
-        toggle: "side_right",
-        cmd: "side_toggle",
-      },
-    ],
-  },
 };
 
 function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
@@ -329,14 +339,24 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
     toggles: {
       chaos: false,
       boost: false,
+      engine_mod: false,
       massive_waves: false,
       ultra_waves: false,
       sirens_muted: true,
       infinite_fuel: false,
       infinite_batteries: false,
+      infinite_ammo: false,
+      no_engine_overheat: false,
       no_clip: false,
       player_damage: true,
       vehicle_damage: true,
+      npc_damage: true,
+      lightning: false,
+      sharks: false,
+      fast_travel: false,
+      third_person: false,
+      map_show_players: false,
+      map_show_vehicles: false,
       side_right: false,
     },
   };
@@ -432,8 +452,11 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
         return `cleanup|${peer}`;
       case "setting":
         return `setting|${peer}|${item.key}|${item.value}`;
-      case "setting_toggle":
-        return `setting|${peer}|${item.key}|${toggleOn ? 1 : 0}`;
+      case "setting_toggle": {
+        let on = !!toggleOn;
+        if (item.invert) on = !on;
+        return `setting|${peer}|${item.key}|${on ? 1 : 0}`;
+      }
       default:
         return null;
     }
