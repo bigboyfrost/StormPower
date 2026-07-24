@@ -88,6 +88,14 @@ public static class SpMem {
   }
 
   public static string PatchWave(float find, float write, string statePath) {
+    return PatchWaveInner(find, write, statePath, true);
+  }
+
+  public static string FreezeWave(float write, string statePath) {
+    return PatchWaveInner(0f, write, statePath, false);
+  }
+
+  static string PatchWaveInner(float find, float write, string statePath, bool doScan) {
     int pid = FindPid();
     if (pid == 0) return "{\"ok\":false,\"error\":\"Stormworks is not running\",\"hits\":0,\"writes\":0,\"frozen\":0}";
 
@@ -97,7 +105,6 @@ public static class SpMem {
     try {
       var addrs = LoadAddrs(statePath);
       int frozen = 0;
-      // Re-freeze previously discovered gerstner magnitude slots
       var stillGood = new HashSet<long>();
       foreach (var addr in addrs) {
         if (WriteFloat(h, addr, write)) {
@@ -107,12 +114,14 @@ public static class SpMem {
       }
 
       int hits = 0, writes = 0;
-      var found = ScanFloat(h, find, 16);
-      hits = found.Count;
-      foreach (var addr in found) {
-        if (WriteFloat(h, addr, write)) {
-          writes++;
-          stillGood.Add(addr);
+      if (doScan) {
+        var found = ScanFloat(h, find, 24);
+        hits = found.Count;
+        foreach (var addr in found) {
+          if (WriteFloat(h, addr, write)) {
+            writes++;
+            stillGood.Add(addr);
+          }
         }
       }
       SaveAddrs(statePath, stillGood);
@@ -259,6 +268,12 @@ if ($Action -eq "wave") {
   $findF = [float]::Parse($Find, $culture)
   $writeF = [float]::Parse($Write, $culture)
   Write-Output ([SpMem]::PatchWave($findF, $writeF, $StateFile))
+  exit 0
+}
+
+if ($Action -eq "wave-freeze") {
+  $writeF = [float]::Parse($Write, $culture)
+  Write-Output ([SpMem]::FreezeWave($writeF, $StateFile))
   exit 0
 }
 

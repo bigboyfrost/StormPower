@@ -323,8 +323,8 @@ local function spawnImpossibleWave(peer_id, dist)
 end
 
 local function pulseWaveCycle(peer_id)
-	-- Full interval refresh only (no half-tick cancel strobe — that bounced the ocean)
-	server.cancelGerstner()
+	-- Do NOT cancelGerstner first — that frees the event and drops our RAM locks.
+	-- spawnTsunami overrides the active event in place.
 	if sea_mode >= 4 then
 		spawnImpossibleWave(peer_id, wave_dist)
 	else

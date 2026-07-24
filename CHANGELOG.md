@@ -1,5 +1,11 @@
 ﻿# StormPower Changelog
 
+## 1.6.1
+- CRITICAL FIX: live memory helper could not run from inside app.asar — waves/overrev never patched RAM in the installed app
+- Helper is now copied to %TEMP% (and shipped in extraResources); freeze loop locks tsunami magnitude at 120× every 400ms
+- Wave pulses no longer cancelGerstner (that wiped the RAM locks); spawn overrides in place
+- Turning waves on immediately kicks a fresh memory scan
+
 ## 1.6.0
 - LIVE memory patching (Cheat Engine–style): Mega Waves and Overrev apply while Stormworks is running — no restart
 - Tsunami uses a unique magnitude marker; companion rewrites it in RAM to ~40× max API height and freezes it

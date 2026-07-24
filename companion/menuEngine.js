@@ -91,19 +91,19 @@ const MENU = {
       },
       {
         label: "Ultra Massive Waves",
-        sub: "Live RAM wave boost — no restart (keep overlay on)",
+        sub: "Live RAM 120x tsunami — wrecks boats, no wind",
         toggle: "ultra_waves",
         cmd: "sea_toggle_ultra",
       },
       {
         label: "Mega Wave Engine",
-        sub: "Live wave boost + shader install for next boot",
+        sub: "Locks live wave boost + shader for next boot",
         toggle: "engine_mod",
         local: "engine_mod",
       },
       {
         label: "Overrev Engine Power",
-        sub: "Live 25x torque in RAM — no restart",
+        sub: "Live RAM 25x Medium/Large torque",
         toggle: "overrev_engine",
         local: "overrev_engine",
       },

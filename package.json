@@ -1,7 +1,7 @@
 {
   "name": "stormpower",
   "productName": "StormPower",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "StormPower - external spawn overlay for Stormworks. By Aimless Developement.",
   "author": "Aimless Developement",
   "license": "MIT",
@@ -56,6 +56,10 @@
         "from": "engine-mod",
         "to": "engine-mod",
         "filter": ["**/*"]
+      },
+      {
+        "from": "companion/StormPowerMem.ps1",
+        "to": "StormPowerMem.ps1"
       },
       {
         "from": "build/icon.ico",

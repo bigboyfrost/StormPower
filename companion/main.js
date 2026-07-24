@@ -60,6 +60,15 @@ function enqueue(cmd) {
   if (!line || line.length > 400) return false;
   commandQueue.push(line);
   if (commandQueue.length > 80) commandQueue.shift();
+  try {
+    const parts = line.split("|");
+    const head = (parts[0] || "").toLowerCase();
+    if (head === "mega_wave") liveMemory.kickWaveScan();
+    if (head === "sea") {
+      if (String(parts[2]) === "0") liveMemory.stopWaveLive();
+      else liveMemory.kickWaveScan();
+    }
+  } catch (_) {}
   return true;
 }
 
@@ -314,9 +323,13 @@ function createHttpBridge() {
     res.type("text/plain").send(commandQueue.shift());
   });
 
-  api.get("/sw/ping", (_req, res) => res.type("text/plain").send("OK"));
+    api.get("/sw/ping", (_req, res) => res.type("text/plain").send("OK"));
 
-  api.post("/api/command", (req, res) => {
+    api.get("/sw/live", (_req, res) => {
+      res.json(liveMemory.getStatus());
+    });
+
+    api.post("/api/command", (req, res) => {
     const ok = enqueue(req.body?.line);
     res.status(ok ? 200 : 400).json({ ok, queue: commandQueue.length });
   });
