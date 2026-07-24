@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StormPower</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="shell" class="shell">
+    <header class="hero">
+      <div class="hero-text">
+        <p class="eyebrow">Aimless Developement</p>
+        <h1>StormPower</h1>
+        <p class="tagline">Spawn · Gear · World</p>
+      </div>
+      <div class="hero-meta">
+        <span id="linkStatus" class="pill warning">Waiting for game</span>
+        <span id="versionPill" class="pill quiet">v—</span>
+      </div>
+    </header>
+
+    <section class="card settings-card">
+      <div class="card-title">Quick Setup</div>
+      <div class="controls">
+        <div class="control">
+          <div class="control-label">
+            <span>Spawn distance</span>
+            <strong id="distValue">20 m</strong>
+          </div>
+          <input id="dist" type="range" min="1" max="200" value="20" />
+          <p class="hint">How far in front of you things appear</p>
+        </div>
+        <div class="row2">
+          <div class="control">
+            <div class="control-label">
+              <span>Amount</span>
+              <strong id="countValue">5</strong>
+            </div>
+            <input id="count" type="range" min="1" max="50" value="5" />
+          </div>
+          <div class="control">
+            <div class="control-label">
+              <span>Scale</span>
+              <strong id="sizeValue">1.0×</strong>
+            </div>
+            <input id="size" type="range" min="1" max="40" value="2" />
+          </div>
+        </div>
+        <div class="control">
+          <div class="control-label">
+            <span>Player peer ID</span>
+            <strong id="peerValue">0</strong>
+          </div>
+          <input id="peer" type="range" min="0" max="16" value="0" />
+          <p class="hint">Use 0 in singleplayer. Multiplayer: your ID from the player list.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card menu-card">
+      <div class="breadcrumb" id="path">Home</div>
+      <ul id="list" class="list"></ul>
+    </section>
+
+    <div id="updateBanner" class="update-banner hidden">
+      <span id="updateText">Update available</span>
+      <button id="updateBtn" type="button">Update</button>
+    </div>
+
+    <footer class="footer">
+      <div class="keys">
+        <span><kbd>F4</kbd> show/hide</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+        <span><kbd>↵</kbd> select</span>
+        <span><kbd>⌫</kbd> back</span>
+      </div>
+      <p class="credit">StormPower · Aimless Developement</p>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
