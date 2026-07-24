@@ -38,16 +38,18 @@ local chaos = {
 	step = 0,
 }
 
--- Vehicle boost: adds forward speed while seated.
--- IMPORTANT: must move the whole vehicle GROUP (not one body),
--- only on the horizontal plane, and not every physics tick —
--- otherwise ships vibrate, seats desync, and the game breaks.
+-- Vehicle boost: shove the seated vehicle forward in local space.
+-- Do NOT use moveGroup with a foreign matrix — that slides the ship around the
+-- player (feels like getting pushed back in the seat) without real travel.
 local boost = {
 	active = false,
 	peer = 0,
 	knots = 40,
 	accum = 0,
-	interval = 6, -- ~10 Hz pulses instead of 60 Hz teleports
+	interval = 3, -- ~20 Hz pulses
+	sign = 1, -- local Z direction (+1 or -1); auto-picked when enabled
+	seat_name = nil,
+	vehicle = 0,
 }
 
 local session = {
@@ -361,79 +363,135 @@ local function getVehicleGroupId(vehicle_id)
 	return nil
 end
 
-local function primaryVehicleOf(vehicle_id)
-	local group_id = getVehicleGroupId(vehicle_id)
-	if not group_id or not server.getVehicleGroup then
-		return vehicle_id, group_id
-	end
-	local ids, ok = server.getVehicleGroup(group_id)
-	if not ok or not ids then
-		return vehicle_id, group_id
-	end
-	-- Prefer the lowest numeric id as the group root when list-style
-	local primary = vehicle_id
-	local best = nil
-	for _, id in pairs(ids) do
-		local n = tonumber(id)
-		if n and (best == nil or n < best) then
-			best = n
-			primary = n
+local function findSeatName(peer_id, vehicle_id)
+	if not server.getVehicleComponents then return nil end
+	local comps, ok = server.getVehicleComponents(vehicle_id)
+	if not ok or not comps or not comps.seats then return nil end
+	local char_id = getCharacter(peer_id)
+	for _, seat in pairs(comps.seats) do
+		if seat and seat.name and seat.name ~= "" then
+			if seat.seated_peer_id == peer_id then return seat.name end
+			if char_id and seat.seated_id == char_id then return seat.name end
 		end
 	end
-	return primary, group_id
+	for _, seat in pairs(comps.seats) do
+		if seat and seat.name and seat.name ~= "" then return seat.name end
+	end
+	return nil
 end
 
--- Horizontal forward boost: moves the whole ship group without fighting buoyancy.
+-- Pick local +Z or -Z based on which matches player look best (world XZ).
+local function pickBoostSign(peer_id, mat)
+	local ox, oy, oz = matrix.position(mat)
+	local function worldFlat(local_z)
+		local p = matrix.multiply(mat, matrix.translation(0, 0, local_z))
+		local x, y, z = matrix.position(p)
+		local dx, dz = x - ox, z - oz
+		local len = math.sqrt(dx * dx + dz * dz)
+		if len < 0.001 then return 0, 0 end
+		return dx / len, dz / len
+	end
+	local fx, fz = worldFlat(1)
+	local bx, bz = worldFlat(-1)
+
+	local wx, wz = lookFlat(peer_id)
+	local lx, ly, lz, lok = server.getPlayerLookDirection(peer_id)
+	if lok and matrix.multiplyXYZW then
+		local tx, ty, tz = matrix.multiplyXYZW(mat, lx, ly, lz, 0)
+		local len = math.sqrt(tx * tx + tz * tz)
+		if len > 0.05 then
+			wx, wz = tx / len, tz / len
+		end
+	end
+
+	local dot_f = fx * wx + fz * wz
+	local dot_b = bx * wx + bz * wz
+	if dot_b > dot_f then return -1 end
+	return 1
+end
+
+local function moveVehicleWorldDelta(vehicle_id, dx, dy, dz)
+	local mat, ok = server.getVehiclePos(vehicle_id)
+	if not ok or not mat then return false end
+	if matrix.invert and matrix.multiplyXYZW then
+		local inv = matrix.invert(mat)
+		if inv then
+			local lx, ly, lz = matrix.multiplyXYZW(inv, dx, dy, dz, 0)
+			server.moveVehicle(vehicle_id, matrix.multiply(mat, matrix.translation(lx, ly, lz)))
+			return true
+		end
+	end
+	-- Fallback: shove this body along its own +Z by the horizontal distance
+	local fl = math.sqrt(dx * dx + dz * dz)
+	if fl < 0.001 then return false end
+	server.moveVehicle(vehicle_id, matrix.multiply(mat, matrix.translation(0, 0, fl)))
+	return true
+end
+
+-- Local-Z shove on the seated vehicle (+ companions by the same world delta).
+-- Never use moveGroup with another body's matrix — that slides the ship around you.
 local function applyVehicleBoost(peer_id, game_ticks)
 	local vid = getSeatedVehicle(peer_id)
 	if not vid then
 		if boost.active then
 			boost.active = false
 			boost.accum = 0
+			boost.seat_name = nil
+			boost.vehicle = 0
 			notify(peer_id, "Boost OFF (left seat)")
 			announce(peer_id, "Vehicle boost stopped — you left the seat.")
 		end
 		return false
 	end
 
+	boost.vehicle = vid
 	boost.accum = (boost.accum or 0) + math.max(1, game_ticks or 1)
-	if boost.accum < (boost.interval or 6) then
+	if boost.accum < (boost.interval or 3) then
 		return true
 	end
 	local ticks = boost.accum
 	boost.accum = 0
 
-	local primary, group_id = primaryVehicleOf(vid)
-	local mat, ok = server.getVehiclePos(primary)
-	if not ok or not mat then
-		mat, ok = server.getVehiclePos(vid)
-	end
+	local mat, ok = server.getVehiclePos(vid)
 	if not ok or not mat then return false end
 
-	-- Target additive speed (+40 kn ≈ 20.58 m/s)
 	local meters = (boost.knots * 0.514444) * (ticks / 60)
-	if meters > 6 then meters = 6 end -- lag safety
-	if meters < 0.05 then return true end
+	if meters > 10 then meters = 10 end
+	if meters < 0.2 then meters = 0.2 end
 
-	local ox, oy, oz = matrix.position(mat)
-	-- 1m local-forward sample → flatten to XZ so pitch doesn't slam boats into the sea
-	local ahead = matrix.multiply(mat, matrix.translation(0, 0, 1))
-	local ax, ay, az = matrix.position(ahead)
-	local dx, dz = ax - ox, az - oz
-	local fl = math.sqrt(dx * dx + dz * dz)
-	if fl < 0.05 then
-		dx, dz = lookFlat(peer_id)
-	else
-		dx, dz = dx / fl, dz / fl
+	local sign = boost.sign or 1
+	local target = matrix.multiply(mat, matrix.translation(0, 0, sign * meters))
+	local x0, y0, z0 = matrix.position(mat)
+	local x1, y1, z1 = matrix.position(target)
+	local dx, dy, dz = x1 - x0, y1 - y0, z1 - z0
+
+	local moved_ids = { vid }
+	local group_id = getVehicleGroupId(vid)
+	if group_id and server.getVehicleGroup then
+		local ids, gok = server.getVehicleGroup(group_id)
+		if gok and ids then
+			moved_ids = {}
+			for _, id in pairs(ids) do
+				moved_ids[#moved_ids + 1] = tonumber(id) or id
+			end
+			if #moved_ids == 0 then moved_ids[1] = vid end
+		end
 	end
 
-	-- World-space horizontal translate (preserves rotation, keeps Y)
-	local target = matrix.multiply(matrix.translation(dx * meters, 0, dz * meters), mat)
+	for i = 1, #moved_ids do
+		local id = moved_ids[i]
+		if id == vid then
+			server.moveVehicle(id, target)
+		else
+			moveVehicleWorldDelta(id, dx, dy, dz)
+		end
+	end
 
-	if group_id and server.moveGroup then
-		server.moveGroup(group_id, target)
-	elseif server.moveVehicle then
-		server.moveVehicle(primary or vid, target)
+	if boost.seat_name and server.setSeated then
+		local char_id = getCharacter(peer_id)
+		if char_id then
+			server.setSeated(char_id, vid, boost.seat_name)
+		end
 	end
 	return true
 end
@@ -760,18 +818,32 @@ local function runCommand(line)
 		if mode == "off" or mode == "0" or mode == "stop" then
 			boost.active = false
 			boost.accum = 0
+			boost.seat_name = nil
+			boost.vehicle = 0
 			notify(peer_id, "Vehicle boost OFF")
+		elseif mode == "flip" or mode == "rev" or mode == "reverse" then
+			boost.sign = -((boost.sign or 1))
+			notify(peer_id, "Boost direction flipped")
+			announce(peer_id, "Boost axis sign = " .. tostring(boost.sign) .. " (use if it goes backward)")
 		else
 			local vid = getSeatedVehicle(peer_id)
 			if not vid then
 				announce(peer_id, "Sit in a vehicle seat first, then enable boost.")
 				notify(peer_id, "Not in a vehicle")
 			else
+				local mat, mok = server.getVehiclePos(vid)
 				boost.active = true
 				boost.peer = peer_id
 				boost.accum = 0
+				boost.vehicle = vid
+				boost.seat_name = findSeatName(peer_id, vid)
+				if mok and mat then
+					boost.sign = pickBoostSign(peer_id, mat)
+				else
+					boost.sign = 1
+				end
 				notify(peer_id, "Boost +40 kn")
-				announce(peer_id, "Vehicle boost ON — whole ship, +40 knots forward. Toggle off when done.")
+				announce(peer_id, "Vehicle boost ON (+40 kn). If it goes the wrong way: ?boost flip")
 			end
 		end
 
@@ -887,7 +959,7 @@ local function help(peer_id)
 	announce(peer_id, "?boom [0-1] [dist]   Explosion")
 	announce(peer_id, "?wind <0-50>   Ultra wind / waves")
 	announce(peer_id, "?chaos / ?chaos off")
-	announce(peer_id, "?boost / ?boost off   Ship speed boost (+40 kn, whole group)")
+	announce(peer_id, "?boost / ?boost off / ?boost flip   Seat vehicle speed boost")
 end
 
 local GIVE = {
@@ -911,6 +983,15 @@ local OUTFITS = {
 	armor = 78,
 }
 
+function onPlayerSit(peer_id, vehicle_id, seat_name)
+	if boost.active and peer_id == boost.peer then
+		boost.vehicle = vehicle_id
+		if seat_name and seat_name ~= "" then
+			boost.seat_name = seat_name
+		end
+	end
+end
+
 function onCreate(is_world_create)
 	spawned = {}
 	sea_mode = 0
@@ -925,6 +1006,8 @@ function onCreate(is_world_create)
 	stopChaos()
 	boost.active = false
 	boost.accum = 0
+	boost.seat_name = nil
+	boost.vehicle = 0
 	silenceSirens()
 	announce(-1, "StormPower ready. Sirens muted. Type ?sp for commands.")
 end
@@ -1152,6 +1235,8 @@ function onCustomCommand(full_message, peer_id, is_admin, is_auth, command, ...)
 		local mode = string.lower(tostring(args[1] or "on"))
 		if mode == "off" or mode == "stop" then
 			runCommand("boost|" .. peer_id .. "|off")
+		elseif mode == "flip" or mode == "rev" or mode == "reverse" then
+			runCommand("boost|" .. peer_id .. "|flip")
 		else
 			runCommand("boost|" .. peer_id .. "|on")
 		end

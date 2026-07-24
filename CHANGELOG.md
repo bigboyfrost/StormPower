@@ -1,5 +1,8 @@
 ﻿# StormPower Changelog
 
+## 1.5.4
+- Vehicle Boost: real local-forward shove (no more sliding in the seat). Auto-picks ship facing; `?boost flip` if reversed
+
 ## 1.5.3
 - Check for updates while StormPower is running (menu open + every 15 min)
 - Release notes formatting fixed (markdown renders again)
