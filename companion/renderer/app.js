@@ -54,21 +54,26 @@
 
   function stmControls(item, idx) {
     if (item.folder) return `<span class="chev">›</span>`;
-    if (!item.stm && !item.toggle) return `<span class="chev"></span>`;
 
-    // STM: ‹ amount ›  [iPhone switch]
-    // Arrows edit amount/value first; switch enables or fires the action.
-    const amount = `<span class="stm-value">${item.stmValue || "—"}</span>`;
-    const sw = `<button type="button" class="ios-switch ${item.on ? "on" : ""}" data-act="toggle" data-idx="${idx}" aria-label="Enable"><span class="ios-knob"></span></button>`;
+    const qty = !!item.hasQty;
+    const sw = !!item.hasSwitch;
+    if (!qty && !sw) return `<span class="chev"></span>`;
 
-    return `
-      <div class="stm">
-        <button type="button" class="stm-btn" data-act="dec" data-idx="${idx}" aria-label="Decrease">‹</button>
+    // STM: arrows only when there is a quantity; switch only when the row can enable.
+    // While the switch is OFF, arrows only stage a value — they do not fire anything.
+    const amount = qty
+      ? `<span class="stm-value">${item.stmValue || "—"}</span>`
+      : "";
+    const arrows = qty
+      ? `<button type="button" class="stm-btn" data-act="dec" data-idx="${idx}" aria-label="Decrease">‹</button>
         ${amount}
-        <button type="button" class="stm-btn" data-act="inc" data-idx="${idx}" aria-label="Increase">›</button>
-        ${sw}
-      </div>
-    `;
+        <button type="button" class="stm-btn" data-act="inc" data-idx="${idx}" aria-label="Increase">›</button>`
+      : "";
+    const switchBtn = sw
+      ? `<button type="button" class="ios-switch ${item.on ? "on" : ""}" data-act="toggle" data-idx="${idx}" aria-label="Enable"><span class="ios-knob"></span></button>`
+      : "";
+
+    return `<div class="stm">${arrows}${switchBtn}</div>`;
   }
 
   function render(state) {
@@ -85,7 +90,7 @@
     (state.items || []).forEach((item, idx) => {
       const li = document.createElement("li");
       if (item.active) li.classList.add("active");
-      if (item.toggle || item.stm) li.classList.add("has-stm");
+      if (item.hasQty || item.hasSwitch || item.toggle || item.stm) li.classList.add("has-stm");
 
       li.innerHTML = `
         <span class="idx">${item.i}</span>
@@ -108,10 +113,11 @@
 
       li.addEventListener("click", (e) => {
         if (e.target.closest("[data-act]")) return;
-        // Folders open on click; STM rows focus so you can set amount then flip the switch
         if (item.folder) window.stormpower?.activateIndex(idx);
-        else if (item.stm || item.toggle) window.stormpower?.focusIndex(idx);
-        else window.stormpower?.activateIndex(idx);
+        else if (item.qtyOnly) window.stormpower?.focusIndex(idx);
+        else if (item.hasSwitch || item.hasQty || item.toggle || item.stm) {
+          window.stormpower?.focusIndex(idx);
+        } else window.stormpower?.activateIndex(idx);
       });
       listEl.appendChild(li);
     });

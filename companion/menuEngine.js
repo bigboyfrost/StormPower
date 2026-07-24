@@ -94,7 +94,7 @@ const MENU = {
       { label: "Explosions", sub: "Blasts (Weapons DLC)", goto: "explosions" },
       { label: "Player", sub: "Heal, money, loadout", goto: "player" },
       { label: "Game Rules", sub: "Damage, fuel, sirens, chaos…", goto: "rules" },
-      { label: "Overlay", sub: "Side, updates, cleanup", goto: "settings" },
+      { label: "Settings", sub: "Side, distance, updates, cleanup", goto: "settings" },
     ],
   },
   spawns: {
@@ -153,7 +153,7 @@ const MENU = {
     ],
   },
   settings: {
-    title: "Overlay",
+    title: "Settings",
     items: [
       {
         label: "Menu on Right",
@@ -168,10 +168,11 @@ const MENU = {
       },
       {
         label: "Spawn Distance",
-        sub: "‹› how far ahead things appear",
+        sub: "‹› how far ahead things appear (used when you flip a spawn)",
         cycle: "dist",
         unit: "m",
         stm: true,
+        qtyOnly: true,
         values: [20, 50, 100, 150, 200, 300, 500, 800, 1200, 2000],
       },
       {
@@ -180,6 +181,7 @@ const MENU = {
         cycle: "count",
         unit: "x",
         stm: true,
+        qtyOnly: true,
         values: [1, 2, 3, 5, 8, 12, 20, 35, 50],
       },
       {
@@ -188,6 +190,7 @@ const MENU = {
         cycle: "size",
         unit: "x",
         stm: true,
+        qtyOnly: true,
         values: [0.5, 1, 1.5, 2, 3, 5, 8, 12, 20],
       },
       { label: "Clean Up Spawns", sub: "Remove StormPower spawns", cmd: "cleanup" },
@@ -343,14 +346,14 @@ const MENU = {
     items: [
       {
         label: "Wave Engine",
-        sub: "‹› height, then flip switch",
+        sub: "‹› height while off, switch starts repeating waves",
         toggle: "wave_engine",
         local: "wave_engine",
         stm: true,
       },
       {
         label: "Wave Height",
-        sub: "‹› set, switch applies",
+        sub: "‹› set while off, switch applies",
         cycle: "wave_height",
         unit: "x",
         stm: true,
@@ -358,7 +361,7 @@ const MENU = {
       },
       {
         label: "Wave Interval",
-        sub: "‹› set, switch applies",
+        sub: "‹› set while off, switch applies",
         cycle: "wave_interval",
         unit: "s",
         stm: true,
@@ -366,7 +369,7 @@ const MENU = {
       },
       {
         label: "Wave Distance",
-        sub: "‹› set, switch applies",
+        sub: "‹› set while off, switch applies",
         cycle: "wave_dist",
         unit: "m",
         stm: true,
@@ -374,19 +377,19 @@ const MENU = {
       },
       {
         label: "Wave Direction",
-        sub: "‹› set, switch applies",
+        sub: "‹› set while off, switch applies",
         cycle: "wave_dir",
         stm: true,
         values: ["ahead", "surround", "random", "N", "NE", "E", "SE", "S", "SW", "W", "NW"],
       },
       {
         label: "Wind Force",
-        sub: "‹› up to 500x, switch applies",
+        sub: "‹› set while off, switch applies (up to 500x)",
         cycle: "wind_speed",
         stm: true,
         values: [0, 1, 5, 10, 25, 50, 100, 200, 350, 500],
       },
-      { label: "Spawn One Wave", sub: "‹› amount, switch spawns", local: "wave_once", stm: true },
+      { label: "Spawn One Wave", sub: "Switch spawns one wall with current settings", local: "wave_once", stm: true },
       { label: "Clear Waves", sub: "Cancel event and unlock memory", local: "wave_clear", stm: true },
     ],
   },
@@ -405,17 +408,17 @@ const MENU = {
     items: [
       {
         label: "Spawn Tornado",
-        sub: "‹› strength, switch spawns",
+        sub: "‹› strength while off, switch spawns",
         local: "spawn_tornado",
         cycle: "tornado_tier",
         stm: true,
         values: [0, 1, 2, 3, 4],
       },
-      { label: "Whirlpool", sub: "‹› amount, switch spawns", cmd: "disaster", id: "whirlpool", stm: true },
-      { label: "Meteor", sub: "‹› amount, switch spawns", cmd: "disaster", id: "meteor", stm: true },
-      { label: "Meteor Shower", sub: "‹› amount, switch spawns", cmd: "disaster", id: "shower", stm: true },
-      { label: "Volcano", sub: "‹› amount, switch spawns", cmd: "disaster", id: "volcano", stm: true },
-      { label: "Stock Tsunami", sub: "‹› amount — API max", cmd: "disaster", id: "tsunami", stm: true },
+      { label: "Whirlpool", sub: "Switch on/off (ocean event)", cmd: "disaster", id: "whirlpool", stm: true },
+      { label: "Meteor", sub: "‹› amount while off, switch spawns", cmd: "disaster", id: "meteor", stm: true },
+      { label: "Meteor Shower", sub: "‹› amount while off, switch spawns", cmd: "disaster", id: "shower", stm: true },
+      { label: "Volcano", sub: "Switch spawns", cmd: "disaster", id: "volcano", stm: true },
+      { label: "Stock Tsunami", sub: "Switch on/off (API max height)", cmd: "disaster", id: "tsunami", stm: true },
     ],
   },
   player: {
@@ -518,6 +521,8 @@ function createMenuEngine({
   const DESPAWNABLE = new Set(["spawn_animal", "spawn_creature", "spawn_object"]);
   // Tsunami/whirlpool are gerstner events — cancelGerstner takes them back down.
   const GERSTNER = new Set(["tsunami", "whirlpool"]);
+  // Disasters that use spawn count as quantity.
+  const COUNTED_DISASTERS = new Set(["meteor", "shower"]);
 
   function itemTag(item) {
     const base = `${item.cmd || item.local || "x"}_${item.id !== undefined ? item.id : item.label}`;
@@ -529,6 +534,29 @@ function createMenuEngine({
     if (DESPAWNABLE.has(item.cmd)) return true;
     if (item.cmd === "disaster" && GERSTNER.has(item.id)) return true;
     return false;
+  }
+
+  /** Whether this row shows ‹ amount › arrows. */
+  function hasQuantity(item) {
+    if (!item || item.goto) return false;
+    if (item.qtyOnly) return true;
+    if (item.cycle && item.values) return true;
+    if (item.toggle === "wave_engine") return true;
+    if (["spawn_animal", "spawn_creature", "spawn_object", "give"].includes(item.cmd)) return true;
+    if (item.cmd === "disaster" && COUNTED_DISASTERS.has(item.id)) return true;
+    return false;
+  }
+
+  /** Switch visible (almost everything actionable). qtyOnly rows are arrows-only prefs. */
+  function hasSwitch(item) {
+    if (!item || item.goto || item.qtyOnly) return false;
+    return !!(item.toggle || item.cycle || item.cmd || item.local || item.stm);
+  }
+
+  function isItemOn(item) {
+    if (!item) return false;
+    if (item.toggle) return !!state.toggles[item.toggle];
+    return !!state.active[itemTag(item)];
   }
 
   function buildCommand(item, toggleOn) {
@@ -628,34 +656,46 @@ function createMenuEngine({
   }
 
   function stmAdjust(item, dir) {
-    // Arrows ONLY change amount/value — never flip the switch.
-    if (!item || item.goto) return;
+    // Arrows ONLY stage amount/value. Game effects fire only while the switch is ON
+    // (or never, for qtyOnly preference rows — those wait for a spawn switch elsewhere).
+    if (!item || item.goto || !hasQuantity(item)) return;
     const delta = dir === "dec" ? -1 : 1;
+    const wasOn = isItemOn(item);
 
     if (item.cycle && item.values) {
       const next = cycleSetting(item.cycle, item.values, delta);
-      state.lastAction = `${item.label}: ${formatCycleValue(item, next)}`;
+      state.lastAction = wasOn
+        ? `${item.label}: ${formatCycleValue(item, next)}`
+        : `${item.label}: ${formatCycleValue(item, next)} (off — flip switch to apply)`;
       notify();
-      if (typeof onSettingChange === "function") onSettingChange(item.cycle, next);
+      if (wasOn && !item.qtyOnly && typeof onSettingChange === "function") {
+        onSettingChange(item.cycle, next);
+      }
       return;
     }
 
-    // Wave Engine: amount = wave height before you flip the switch
+    // Wave Engine: amount = wave height
     if (item.toggle === "wave_engine") {
       const values = [1, 2, 3, 5, 8, 12, 18, 25, 40, 60, 90, 140];
       const next = cycleSetting("wave_height", values, delta);
-      state.lastAction = `Wave Height: ${next}x`;
+      state.lastAction = wasOn
+        ? `Wave Height: ${next}x`
+        : `Wave Height: ${next}x (off — flip switch to start)`;
       notify();
-      if (typeof onSettingChange === "function") onSettingChange("wave_height", next);
+      if (wasOn && typeof onSettingChange === "function") {
+        onSettingChange("wave_height", next);
+      }
       return;
     }
 
-    // Default amount (spawn count) for actions / other toggles
+    // Default amount (spawn count)
     const cur = Math.max(1, Math.floor(Number(state.settings.count) || 1));
     const next = Math.max(1, Math.min(50, cur + delta));
     state.settings.count = next;
     saveSettings(state.settings);
-    state.lastAction = `Amount: ${next}`;
+    state.lastAction = wasOn
+      ? `Amount: ${next}`
+      : `Amount: ${next} (off — flip switch to spawn)`;
     notify();
   }
 
@@ -690,8 +730,20 @@ function createMenuEngine({
       if (item.toggle) {
         next = !state.toggles[item.toggle];
         state.toggles[item.toggle] = next;
+      } else if (item.cycle) {
+        // Tornado etc: sticky switch — ON spawns with staged value, OFF just clears the switch
+        // (game cannot cancel a tornado).
+        const tag = itemTag(item);
+        if (state.active[tag]) {
+          delete state.active[tag];
+          state.lastAction = `${item.label}: OFF`;
+          notify();
+          return;
+        }
+        state.active[tag] = true;
+        next = true;
       } else {
-        // One-shot local action: show the switch move, then spring back.
+        // One-shot local action with no lasting state (clear waves, check updates).
         pulseActive(itemTag(item), item.label + "…");
       }
       state.lastAction = item.label + "…";
@@ -717,16 +769,35 @@ function createMenuEngine({
         })
         .catch((err) => {
           if (item.toggle) state.toggles[item.toggle] = !next;
+          if (item.cycle) delete state.active[itemTag(item)];
           state.lastAction = String(err.message || err);
           notify();
         });
       return;
     }
 
-    // Cycle-only rows: switch re-applies the current value (arrows already set it).
+    // Cycle setting rows: switch ON applies staged value and stays on; OFF clears.
+    // qtyOnly prefs (distance/amount/size) have no switch — ignore activate.
     if (item.cycle && item.values) {
+      if (item.qtyOnly) {
+        state.lastAction = `${item.label}: ${formatCycleValue(item, state.settings[item.cycle])} (staged)`;
+        notify();
+        return;
+      }
+      const tag = itemTag(item);
+      if (state.active[tag]) {
+        delete state.active[tag];
+        if (item.cycle === "wind_speed" && typeof onSettingChange === "function") {
+          onSettingChange("wind_speed", 0);
+        }
+        state.lastAction = `${item.label}: OFF`;
+        notify();
+        return;
+      }
+      state.active[tag] = true;
       const cur = state.settings[item.cycle];
-      pulseActive(itemTag(item), `${item.label}: ${formatCycleValue(item, cur)}`);
+      state.lastAction = `${item.label}: ${formatCycleValue(item, cur)}`;
+      notify();
       if (typeof onSettingChange === "function") onSettingChange(item.cycle, cur);
       return;
     }
@@ -796,12 +867,21 @@ function createMenuEngine({
       return;
     }
 
-    // Momentary rows (gear, explosions, one-shot disasters): the switch fires and
-    // springs back, because the game gives us no way to take these back.
+    // Momentary / sticky fire for remaining cmds (gear, explosions, weather…).
+    // Things that can be undone use isStateful above. Everything else: ON stays
+    // until flipped OFF (OFF is visual-only when the game cannot undo it).
+    if (state.active[tag]) {
+      delete state.active[tag];
+      state.lastAction = `${item.label}: OFF`;
+      notify();
+      return;
+    }
     const line = buildCommand(item);
     if (line) {
       enqueue(line);
-      pulseActive(tag, `Sent: ${item.label}`);
+      state.active[tag] = true;
+      state.lastAction = `Sent: ${item.label}`;
+      notify();
     }
   }
 
@@ -916,19 +996,21 @@ function createMenuEngine({
       search: state.search || "",
       cursor: state.cursor,
       items: items.map((it, i) => {
+        const qty = hasQuantity(it);
+        const sw = hasSwitch(it);
         let stmValue = "";
-        if (it.cycle) {
-          stmValue = formatCycleValue(it, state.settings[it.cycle]);
-        } else if (it.toggle === "wave_engine") {
-          stmValue = `${state.settings.wave_height}x`;
-        } else if (it.stm || it.cmd || it.local) {
-          stmValue = `×${Math.max(1, Math.floor(Number(state.settings.count) || 1))}`;
-        } else if (it.toggle) {
-          stmValue = `×${Math.max(1, Math.floor(Number(state.settings.count) || 1))}`;
+        if (qty) {
+          if (it.cycle) {
+            stmValue = formatCycleValue(it, state.settings[it.cycle]);
+          } else if (it.toggle === "wave_engine") {
+            stmValue = `${state.settings.wave_height}x`;
+          } else {
+            stmValue = `×${Math.max(1, Math.floor(Number(state.settings.count) || 1))}`;
+          }
         }
         const on = it.toggle
           ? !!state.toggles[it.toggle]
-          : it.goto
+          : it.goto || it.qtyOnly
             ? false
             : !!state.active[itemTag(it)];
         return {
@@ -937,7 +1019,10 @@ function createMenuEngine({
           sub: it.sub || "",
           folder: !!it.goto,
           cycle: !!it.cycle,
-          stm: !!(it.stm || it.toggle || it.cycle || it.cmd || it.local),
+          stm: sw || qty,
+          hasQty: qty,
+          hasSwitch: sw,
+          qtyOnly: !!it.qtyOnly,
           stmValue,
           toggle: it.toggle || null,
           on,
