@@ -149,9 +149,11 @@ const MENU = {
       { label: "Clear / Calm Seas", sub: "No wind, flat water", cmd: "sea", mode: 0, wind: 0 },
       { label: "Choppy Seas (worst ride)", sub: "Wind 0.72 — big + frequent waves", cmd: "sea", mode: 1, wind: 0.72 },
       { label: "Max Weather Waves", sub: "Wind 1.0 — tallest stock waves (deep ocean)", cmd: "sea", mode: 1, wind: 1 },
-      { label: "MASSIVE WAVES", sub: "Max seas + repeating giant wave events", cmd: "sea", mode: 2, wind: 1 },
+      { label: "MASSIVE WAVES", sub: "Rotating mega wave + max seas (1 at a time)", cmd: "sea", mode: 2, wind: 1 },
       { label: "Stop Massive Waves", sub: "Cancel wave events, calm wind", cmd: "sea", mode: 0, wind: 0 },
       { label: "Spawn One Mega Wave", sub: "Single max tsunami near you", cmd: "mega_wave" },
+      { label: "Disable Disaster Sirens", sub: "Mute warning towers (recommended)", cmd: "sirens", mode: "off" },
+      { label: "Enable Disaster Sirens", sub: "Turn warning towers back on", cmd: "sirens", mode: "on" },
       { label: "Heavy Fog", cmd: "weather", fog: 1, rain: 0, wind: 0.2 },
       { label: "Heavy Rain + Wind", cmd: "weather", fog: 0.2, rain: 1, wind: 0.85 },
     ],
@@ -235,6 +237,8 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
         return `sea|${peer}|${item.mode}|${item.wind}`;
       case "mega_wave":
         return `mega_wave|${peer}`;
+      case "sirens":
+        return `sirens|${peer}|${item.mode}`;
       case "wind_boost":
         return `wind_boost|${peer}|${item.wind}`;
       case "heal":

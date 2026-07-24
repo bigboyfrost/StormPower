@@ -16,7 +16,11 @@ local weather_wind = 0
 -- sea_mode: 0 = off, 1 = weather waves only, 2 = weather + repeating mega wave events
 local sea_mode = 0
 local tsunami_timer = 0
-local TSUNAMI_INTERVAL = 240 -- ticks between mega-wave refreshes (~4s)
+local tsunami_angle = 0
+local TSUNAMI_INTERVAL = 180 -- refresh epicenter often (engine allows only ONE at a time)
+local sirens_muted = true -- default mute; disasters addon re-triggers them
+local tracked_sirens = {}
+local siren_refresh = 0
 
 -- Session defaults for chat commands
 local session = {
@@ -99,17 +103,59 @@ local function setWeatherState(fog, rain, wind)
 	server.setWeather(weather_fog, weather_rain, weather_wind)
 end
 
+local function silenceSirens()
+	local n = 0
+	-- Known disaster-siren keypad: "state" 0 = off (from Default Natural Disasters)
+	for id, _ in pairs(tracked_sirens) do
+		if server.setVehicleKeypad(id, "state", 0) then
+			n = n + 1
+		end
+	end
+	-- Also try by name in case we missed tracking
+	local by_name, ok = server.getVehiclesByName("default_siren")
+	if ok and by_name then
+		for _, id in pairs(by_name) do
+			tracked_sirens[id] = true
+			if server.setVehicleKeypad(id, "state", 0) then
+				n = n + 1
+			end
+		end
+	end
+	-- Calm player audio mood (disaster music / tension)
+	server.setAudioMood(-1, 0)
+	return n
+end
+
+local function enableSirens()
+	local n = 0
+	for id, _ in pairs(tracked_sirens) do
+		if server.setVehicleKeypad(id, "state", 1) then
+			n = n + 1
+		end
+	end
+	server.setAudioMood(-1, 2)
+	return n
+end
+
 local function spawnMegaWaveNear(peer_id)
-	-- Giant gerstner wave event (this is what creates "massive" seas beyond normal chop)
-	local mat = frontMatrix(peer_id, 150, 0)
-	if not mat then
-		mat = server.getPlayerPos(peer_id)
+	-- Engine hard-limit: only ONE tsunami/whirlpool (gerstner event) can exist.
+	-- Stronger events override weaker ones. We rotate the epicenter around the
+	-- player each refresh to simulate multi-directional massive seas.
+	local pos, ok = server.getPlayerPos(peer_id)
+	if not ok then
+		return false
 	end
-	if mat then
-		server.spawnTsunami(mat, 1.0)
-		return true
+	tsunami_angle = tsunami_angle + 1.1
+	local radius = 120 + (tsunami_angle % 3) * 80
+	local x = pos[13] + math.cos(tsunami_angle) * radius
+	local z = pos[15] + math.sin(tsunami_angle) * radius
+	local mat = matrix.translation(x, 0, z)
+	-- Always magnitude 1 so each refresh overrides the previous
+	server.spawnTsunami(mat, 1.0)
+	if sirens_muted then
+		silenceSirens()
 	end
-	return false
+	return true
 end
 
 local function runCommand(line)
@@ -247,9 +293,11 @@ local function runCommand(line)
 		else
 			setWeatherState(weather_fog, weather_rain, wind)
 			if mode >= 2 then
+				sirens_muted = true
+				silenceSirens()
 				spawnMegaWaveNear(peer_id)
-				notify(peer_id, "MASSIVE WAVES ON")
-				announce(peer_id, "Massive waves: max sea state + repeating mega wave events. Best in deep ocean (300m+).")
+				notify(peer_id, "MASSIVE WAVES ON (sirens muted)")
+				announce(peer_id, "Massive waves on. Game only allows 1 tsunami at a time — StormPower rotates the epicenter. Deep ocean (300m+) is best.")
 			else
 				server.cancelGerstner()
 				notify(peer_id, string.format("Sea state ON (wind %.2f)", weather_wind))
@@ -259,11 +307,24 @@ local function runCommand(line)
 
 	elseif cmd == "mega_wave" then
 		if spawnMegaWaveNear(peer_id) then
-			-- Keep weather wind max so residual seas stay huge
 			setWeatherState(weather_fog, weather_rain, 1)
+			if sirens_muted then silenceSirens() end
 			notify(peer_id, "Mega wave spawned")
 		else
 			announce(peer_id, "Could not spawn mega wave")
+		end
+
+	elseif cmd == "sirens" then
+		local mode = tostring(p[3] or "off")
+		if mode == "on" or mode == "1" then
+			sirens_muted = false
+			local n = enableSirens()
+			notify(peer_id, "Sirens enabled (" .. n .. ")")
+		else
+			sirens_muted = true
+			local n = silenceSirens()
+			notify(peer_id, "Sirens muted (" .. n .. " towers)")
+			announce(peer_id, "Disaster sirens forced OFF. They will stay muted while StormPower is running.")
 		end
 
 	elseif cmd == "wind_boost" then
@@ -338,6 +399,7 @@ local function help(peer_id)
 	announce(peer_id, "?outfit scuba|diving|armor|arctic")
 	announce(peer_id, "?waves calm|choppy|max|mega|off")
 	announce(peer_id, "?tsunami            One mega wave near you")
+	announce(peer_id, "?sirens off|on      Mute / enable disaster sirens")
 	announce(peer_id, "?wind <0-10>        Alias (2+ = massive waves)")
 	announce(peer_id, "Overlay: click the SP button to show/hide menu")
 end
@@ -368,8 +430,19 @@ function onCreate(is_world_create)
 	sea_mode = 0
 	weather_wind = 0
 	tsunami_timer = 0
+	tsunami_angle = 0
 	tick_counter = 0
-	announce(-1, "StormPower ready. Type ?sp for commands. Use the SP overlay button to open the menu.")
+	sirens_muted = true
+	tracked_sirens = {}
+	-- Discover already-spawned siren towers by name
+	local by_name, ok = server.getVehiclesByName("default_siren")
+	if ok and by_name then
+		for _, id in pairs(by_name) do
+			tracked_sirens[id] = true
+		end
+	end
+	silenceSirens()
+	announce(-1, "StormPower ready. Sirens muted by default. Type ?sp for commands.")
 end
 
 function onTick(game_ticks)
@@ -380,12 +453,20 @@ function onTick(game_ticks)
 		server.httpGet(PORT, "/sw/poll")
 	end
 
-	-- Keep sea state locked so the game cannot ease waves down
 	if sea_mode >= 1 then
 		server.setWeather(weather_fog, weather_rain, weather_wind)
 	end
 
-	-- MASSIVE mode: refresh giant wave events (only one gerstner event at a time)
+	-- Keep re-muting: Default Natural Disasters re-triggers sirens on each disaster tick
+	if sirens_muted then
+		siren_refresh = siren_refresh + gt
+		if siren_refresh >= 60 then
+			siren_refresh = 0
+			silenceSirens()
+		end
+	end
+
+	-- MASSIVE mode: one gerstner event at a time (engine limit). Rotate epicenter.
 	if sea_mode >= 2 then
 		tsunami_timer = tsunami_timer + gt
 		if tsunami_timer >= TSUNAMI_INTERVAL then
@@ -395,6 +476,57 @@ function onTick(game_ticks)
 			if players[1] then peer = players[1].id end
 			spawnMegaWaveNear(peer)
 		end
+	end
+end
+
+-- Track siren towers as they stream in
+function onVehicleLoad(vehicle_id)
+	local btn, ok = server.getVehicleButton(vehicle_id, "trigger")
+	if ok then
+		tracked_sirens[vehicle_id] = true
+		if sirens_muted then
+			server.setVehicleKeypad(vehicle_id, "state", 0)
+		end
+	end
+end
+
+function onSpawnAddonComponent(id, name, type_string, addon_index)
+	if type_string == "vehicle" and name == "default_siren" then
+		tracked_sirens[id] = true
+		if sirens_muted then
+			server.setVehicleKeypad(id, "state", 0)
+		end
+	end
+end
+
+-- When any tsunami starts (including ours), immediately silence sirens if muted
+function onTsunami(transform, magnitude)
+	if sirens_muted then
+		silenceSirens()
+	end
+end
+
+function onWhirlpool(transform, magnitude)
+	if sirens_muted then
+		silenceSirens()
+	end
+end
+
+function onTornado(transform)
+	if sirens_muted then
+		silenceSirens()
+	end
+end
+
+function onMeteor(transform, magnitude)
+	if sirens_muted then
+		silenceSirens()
+	end
+end
+
+function onVolcano(transform)
+	if sirens_muted then
+		silenceSirens()
 	end
 end
 
@@ -487,5 +619,8 @@ function onCustomCommand(full_message, peer_id, is_admin, is_auth, command, ...)
 		end
 	elseif command == "?tsunami" or command == "?megawave" then
 		runCommand("mega_wave|" .. peer_id)
+	elseif command == "?sirens" then
+		local mode = string.lower(tostring(args[1] or "off"))
+		runCommand("sirens|" .. peer_id .. "|" .. mode)
 	end
 end
