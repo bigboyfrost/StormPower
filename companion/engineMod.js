@@ -133,7 +133,7 @@ function install() {
   return {
     ok: true,
     installed: true,
-    message: "Mega-wave engine ON (localized island-scale wall) — restart Stormworks",
+    message: "Mega-wave engine ON — live RAM boost active; shader ready for next boot",
     stormworks: status.stormworks,
   };
 }
@@ -166,7 +166,7 @@ function uninstall() {
   return {
     ok: true,
     installed: false,
-    message: "Mega-wave engine OFF — restart Stormworks",
+    message: "Mega-wave engine OFF",
     stormworks: status.stormworks,
   };
 }
@@ -222,7 +222,7 @@ function installOverrev() {
   return {
     ok: true,
     installed: true,
-    message: `Overrev Power ON (${patched} engine types, 25x torque) — restart Stormworks`,
+    message: `Overrev Power ON (${patched} engine types) — live RAM patch + file backup`,
     stormworks: status.stormworks,
   };
 }
@@ -251,7 +251,7 @@ function uninstallOverrev() {
     installed: false,
     message:
       restored > 0
-        ? `Overrev Power OFF (${restored} engine types restored) — restart Stormworks`
+        ? `Overrev Power OFF (${restored} engine types restored)`
         : "No Overrev Power backups found; use Steam Verify integrity",
     stormworks: status.stormworks,
   };

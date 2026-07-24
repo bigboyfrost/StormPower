@@ -1,5 +1,11 @@
 ﻿# StormPower Changelog
 
+## 1.6.0
+- LIVE memory patching (Cheat Engine–style): Mega Waves and Overrev apply while Stormworks is running — no restart
+- Tsunami uses a unique magnitude marker; companion rewrites it in RAM to ~40× max API height and freezes it
+- Overrev writes Medium/Large `engine_max_force` values directly in process memory (file patch still saved for next boot)
+- Menu copy updated — no more "restart Stormworks" requirement for these toggles
+
 ## 1.5.9
 - Mega Wave Engine rebuilt as a narrow localized wall: 900m shader coefficient, 2.5 Ultra magnitude
 - Wave refresh slowed to once per minute so the ocean no longer pulses every few seconds

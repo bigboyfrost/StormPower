@@ -21,10 +21,10 @@ local tsunami_phase = 0 -- 0 wait, 1 just cancelled (spawn next)
 local wave_dist = 150
 local wave_peer = 0
 local wave_pulse = 0 -- slight distance variation between crests
-local TSUNAMI_INTERVAL_NORMAL = 2700 -- 45 seconds
-local TSUNAMI_INTERVAL_ULTRA = 3600 -- 60 seconds
+local TSUNAMI_INTERVAL_NORMAL = 1800 -- 30 seconds
+local TSUNAMI_INTERVAL_ULTRA = 1800 -- 30 seconds — keeps live memory marker fresh
 -- Giant crests must travel instead of being cancelled every few seconds.
-local TSUNAMI_INTERVAL_IMPOSSIBLE = 3600
+local TSUNAMI_INTERVAL_IMPOSSIBLE = 1800
 local sirens_muted = true
 local tracked_sirens = {}
 local siren_refresh = 0
@@ -294,8 +294,9 @@ local function spawnMegaWaveNear(peer_id, dist)
 	if not mat then
 		return false
 	end
-	-- The shader localizes the wall; magnitude drives the actual disaster event.
-	server.spawnTsunami(mat, 2.0)
+	-- API clamps magnitude to 0–1. 0.814759 is a unique Exact-Value marker so the
+	-- StormPower companion can find it in RAM and rewrite it live (no restart).
+	server.spawnTsunami(mat, 0.814759)
 	if sirens_muted then
 		silenceSirens()
 	end
@@ -316,7 +317,7 @@ local function spawnImpossibleWave(peer_id, dist)
 	d = math.max(80, math.min(5000, d))
 	local mat = waveMatrix(peer_id, d, 0)
 	if not mat then return false end
-	server.spawnTsunami(mat, 2.5)
+	server.spawnTsunami(mat, 0.814759)
 	if sirens_muted then silenceSirens() end
 	return true
 end
@@ -822,11 +823,11 @@ local function runCommand(line)
 				tsunami_phase = 1
 				pulseWaveCycle(peer_id)
 				if mode >= 4 then
-					notify(peer_id, "ULTRA WAVES @ " .. math.floor(dist) .. "m")
-					announce(peer_id, "Tall tsunami pulses ahead. Use Toggles → Mega Wave Engine for mild crest height. Restart Stormworks after enabling.")
+					notify(peer_id, "ULTRA WAVES @ " .. math.floor(dist) .. "m (live RAM boost)")
+					announce(peer_id, "Tall tsunami pulses ahead. StormPower rewrites wave magnitude in memory — no restart. Keep the overlay running.")
 				else
-					notify(peer_id, (mode >= 3 and "ULTRA " or "") .. "MASSIVE WAVES @ " .. math.floor(dist) .. "m")
-					announce(peer_id, "Tsunami loop ahead of you at " .. math.floor(dist) .. "m. Sirens muted.")
+					notify(peer_id, (mode >= 3 and "ULTRA " or "") .. "MASSIVE WAVES @ " .. math.floor(dist) .. "m (live)")
+					announce(peer_id, "Tsunami loop ahead at " .. math.floor(dist) .. "m. Companion applies live memory boost. Sirens muted.")
 				end
 			else
 				server.cancelGerstner()

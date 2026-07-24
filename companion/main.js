@@ -16,6 +16,7 @@ const appUpdater = require("./appUpdater");
 const { checkForUpdates: checkZipUpdates, spawnFinishUpdate } = require("./updater");
 const { createMenuEngine } = require("./menuEngine");
 const engineMod = require("./engineMod");
+const liveMemory = require("./liveMemory");
 const {
   isPackaged,
   syncStormworksAddon,
@@ -545,18 +546,50 @@ app.whenReady().then(async () => {
     enqueue,
     onChange: onMenuChange,
     onSideChange: (side) => placeWindows(side),
+    onToggle: (key, on) => {
+      const wavesOn =
+        !!(menu?.toggles?.massive_waves || menu?.toggles?.ultra_waves || menu?.toggles?.engine_mod);
+      if (key === "massive_waves" || key === "ultra_waves" || key === "engine_mod") {
+        if (wavesOn) liveMemory.startWaveLive();
+        else liveMemory.stopWaveLive();
+      }
+      if (key === "overrev_engine") {
+        if (on) liveMemory.startEngineLive();
+        else liveMemory.stopEngineLive();
+      }
+    },
     onLocalAction: async (action, { on }) => {
       if (action === "engine_mod") {
         const res = engineMod.setInstalled(!!on);
-        // Calm seas so an old tall gerstner is not left bouncing the ocean
-        if (res && res.ok) {
+        if (on) {
+          liveMemory.startWaveLive();
+          if (res && res.ok) {
+            res.message =
+              "Mega Wave LIVE — scanning RAM for tsunami marker (keep Stormworks + overlay running). Shader also installed for next boot.";
+          }
+        } else {
+          const t = menu?.toggles || {};
+          if (!t.massive_waves && !t.ultra_waves) liveMemory.stopWaveLive();
           const peer = menu?.settings?.peer ?? 0;
           enqueue(`sea|${peer}|0|0|${menu?.settings?.dist || 20}`);
         }
         return res;
       }
       if (action === "overrev_engine") {
-        return engineMod.setOverrevInstalled(!!on);
+        const res = engineMod.setOverrevInstalled(!!on);
+        if (on) {
+          const live = liveMemory.startEngineLive();
+          if (res && res.ok) {
+            res.message =
+              "Overrev LIVE — patching engine_max_force in Stormworks RAM now (no restart). File patch kept for next boot.";
+          }
+          if (live?.lastEngine?.message) {
+            // status fills on first scan tick
+          }
+        } else {
+          liveMemory.stopEngineLive();
+        }
+        return res;
       }
       if (action === "check_updates") {
         const info = await appUpdater.checkForUpdates({ silent: false });

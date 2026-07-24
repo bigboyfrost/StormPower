@@ -85,25 +85,25 @@ const MENU = {
       },
       {
         label: "Massive Waves",
-        sub: "Tsunami pulse loop at spawn distance",
+        sub: "Live RAM tsunami boost — no restart",
         toggle: "massive_waves",
         cmd: "sea_toggle",
       },
       {
         label: "Ultra Massive Waves",
-        sub: "Island-scale rogue walls — enable Mega Wave Engine",
+        sub: "Live RAM wave boost — no restart (keep overlay on)",
         toggle: "ultra_waves",
         cmd: "sea_toggle_ultra",
       },
       {
         label: "Mega Wave Engine",
-        sub: "Localized 900m wave wall — restart Stormworks",
+        sub: "Live wave boost + shader install for next boot",
         toggle: "engine_mod",
         local: "engine_mod",
       },
       {
         label: "Overrev Engine Power",
-        sub: "25x engine torque — restart Stormworks",
+        sub: "Live 25x torque in RAM — no restart",
         toggle: "overrev_engine",
         local: "overrev_engine",
       },
@@ -329,7 +329,7 @@ const MENU = {
   },
 };
 
-function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
+function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction, onToggle }) {
   const state = {
     open: false,
     stack: ["home"],
@@ -496,6 +496,9 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
           if (res && typeof res.installed === "boolean" && item.toggle) {
             state.toggles[item.toggle] = !!res.installed;
           }
+          if (item.toggle && typeof onToggle === "function") {
+            onToggle(item.toggle, !!state.toggles[item.toggle]);
+          }
           state.lastAction = (res && res.message) || item.label;
           notify();
         })
@@ -532,6 +535,7 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
       if (line) {
         enqueue(line);
         state.lastAction = `${item.label}: ${next ? "ON" : "OFF"}`;
+        if (typeof onToggle === "function") onToggle(key, next);
         notify();
       }
       return;
@@ -679,6 +683,9 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
     selectIndex,
     get settings() {
       return state.settings;
+    },
+    get toggles() {
+      return state.toggles;
     },
     get open() {
       return state.open;
