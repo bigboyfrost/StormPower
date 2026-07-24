@@ -18,10 +18,12 @@ Install (friends)
 
 Updates
   • StormPower checks GitHub for updates automatically
-  • Use the in-app Update screen when a new version is available
+  • When an update is found you get an overlay banner AND an in-game
+    Stormworks notify/announce (while the addon is connected)
+  • Use Other → Check for Updates, or the in-app Update screen
   • No Node.js and no zip folders required
-  • MEGA waves (engine patch): close Stormworks, run
-      engine-mod\INSTALL_MEGA_WAVES.bat
+  • Mega Wave Engine: toggle from Weather & Waves / Other in the menu
+    (restart Stormworks after installing or removing the patch)
 
 If Windows SmartScreen warns
   • Click More info → Run anyway (unsigned build until a cert is added)
@@ -34,6 +36,7 @@ Tips
   • Use Borderless Window in Stormworks so the overlay shows
   • Exclusive fullscreen hides external windows — use chat (?sp)
   • Spawn distance slider controls how far things / tsunamis appear
+  • Flip Boost Direction is under Other if vehicle boost goes backward
 
 Icon
   • Temporary stock icon ships in build/icon.ico

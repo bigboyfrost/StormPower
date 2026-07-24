@@ -809,6 +809,19 @@ local function runCommand(line)
 			end
 		end
 
+	elseif cmd == "notify_update" then
+		local ver = tostring(p[3] or "?")
+		local msg = "Update available: StormPower v" .. ver
+		announce(-1, msg .. " — open overlay → Other → Check for Updates")
+		local players = server.getPlayers()
+		if players then
+			for _, pl in pairs(players) do
+				if pl.id then notify(pl.id, msg) end
+			end
+		else
+			notify(peer_id, msg)
+		end
+
 	elseif cmd == "sirens" then
 		local mode = tostring(p[3] or "off")
 		if mode == "on" or mode == "1" then

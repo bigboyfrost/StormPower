@@ -220,11 +220,17 @@ const MENU = {
       },
       {
         label: "Ultra Massive Waves",
-        sub: "Stacked pulses + wind x50",
+        sub: "Stacked pulses + wind x50 (use Mega Wave Engine)",
         toggle: "ultra_waves",
         cmd: "sea_toggle_ultra",
       },
       { label: "Spawn One Mega Wave", sub: "Uses spawn distance in front of you", cmd: "mega_wave" },
+      {
+        label: "Mega Wave Engine",
+        sub: "Install/remove ocean shader patch from menu",
+        toggle: "engine_mod",
+        local: "engine_mod",
+      },
       {
         label: "Mute Disaster Sirens",
         sub: "Force warning towers off",
@@ -250,6 +256,22 @@ const MENU = {
         sub: "Warp pulses ~18m (hard teleport)",
         toggle: "boost",
         cmd: "boost_toggle",
+      },
+      {
+        label: "Flip Boost Direction",
+        sub: "If boost goes the wrong way",
+        cmd: "boost_flip",
+      },
+      {
+        label: "Mega Wave Engine",
+        sub: "Patch Stormworks ocean shaders (~4x)",
+        toggle: "engine_mod",
+        local: "engine_mod",
+      },
+      {
+        label: "Check for Updates",
+        sub: "Look for a new StormPower release",
+        local: "check_updates",
       },
     ],
   },
@@ -297,7 +319,7 @@ const MENU = {
   },
 };
 
-function createMenuEngine({ enqueue, onChange, onSideChange }) {
+function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
   const state = {
     open: false,
     stack: ["home"],
@@ -383,6 +405,8 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
         return `boost|${peer}|${item.mode}`;
       case "boost_toggle":
         return `boost|${peer}|${toggleOn ? "on" : "off"}`;
+      case "boost_flip":
+        return `boost|${peer}|flip`;
       case "explode":
         return `explode|${peer}|${item.mag}|${dist}`;
       case "explode_ring":
@@ -422,6 +446,39 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
       state.cursor = 0;
       state.lastAction = "Opened " + item.label;
       notify();
+      return;
+    }
+
+    // Local companion actions (engine mod, update check, etc.) — not sent to Lua
+    if (item.local) {
+      let next = true;
+      if (item.toggle) {
+        next = !state.toggles[item.toggle];
+        state.toggles[item.toggle] = next;
+      }
+      state.lastAction = item.label + "…";
+      notify();
+      Promise.resolve()
+        .then(() =>
+          typeof onLocalAction === "function"
+            ? onLocalAction(item.local, { on: next, item })
+            : { ok: false, message: "No handler" }
+        )
+        .then((res) => {
+          if (res && res.ok === false && item.toggle) {
+            state.toggles[item.toggle] = !next;
+          }
+          if (res && typeof res.installed === "boolean" && item.toggle === "engine_mod") {
+            state.toggles.engine_mod = !!res.installed;
+          }
+          state.lastAction = (res && res.message) || item.label;
+          notify();
+        })
+        .catch((err) => {
+          if (item.toggle) state.toggles[item.toggle] = !next;
+          state.lastAction = String(err.message || err);
+          notify();
+        });
       return;
     }
 
@@ -534,6 +591,12 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
     notify();
   }
 
+  function setToggle(key, on) {
+    if (!key || !(key in state.toggles)) return;
+    state.toggles[key] = !!on;
+    notify();
+  }
+
   function getSnapshot() {
     const p = page();
     return {
@@ -582,6 +645,7 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
     setOpen,
     toggleOpen,
     updateSettings,
+    setToggle,
     getSnapshot,
     getInGameText,
     activate,

@@ -1,5 +1,11 @@
 ﻿# StormPower Changelog
 
+## 1.5.6
+- In-game Stormworks notify + announce when an update is available
+- Mega Wave Engine install/uninstall from the overlay menu (no bat required)
+- Flip Boost Direction + Check for Updates menu items
+- Packaged app includes engine-mod resources for menu-driven install
+
 ## 1.5.5
 - Vehicle Boost rewritten as hard warp pulses (setGroupPos / setVehiclePos) — soft moveVehicle cannot beat ship physics
 - Tsunami API magnitude raised (4–5) for taller gerstner waves

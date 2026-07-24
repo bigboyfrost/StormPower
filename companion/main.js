@@ -15,6 +15,7 @@ const { spawn } = require("child_process");
 const appUpdater = require("./appUpdater");
 const { checkForUpdates: checkZipUpdates, spawnFinishUpdate } = require("./updater");
 const { createMenuEngine } = require("./menuEngine");
+const engineMod = require("./engineMod");
 const {
   isPackaged,
   syncStormworksAddon,
@@ -45,6 +46,7 @@ let lastStatus = { connected: false, lastPoll: 0 };
 let detached = false;
 let cachedUpdateInfo = null;
 let lastUpdateCheckAt = 0;
+let lastInGameUpdateNotify = "";
 
 let menu = null;
 
@@ -203,6 +205,14 @@ function onMenuChange(snap) {
   } else hideMainWindow();
 }
 
+function notifyInGameUpdate(info) {
+  const ver = String(info?.latest || "").replace(/^v/i, "");
+  if (!ver || ver === lastInGameUpdateNotify) return;
+  lastInGameUpdateNotify = ver;
+  const peer = menu?.settings?.peer ?? 0;
+  enqueue(`notify_update|${peer}|${ver}`);
+}
+
 async function pollForUpdates(reason = "poll") {
   const now = Date.now();
   if (reason !== "startup" && now - lastUpdateCheckAt < UPDATE_THROTTLE_MS) return;
@@ -210,7 +220,10 @@ async function pollForUpdates(reason = "poll") {
   try {
     const info = await appUpdater.checkForUpdates({ silent: true });
     cachedUpdateInfo = info;
-    if (info?.updateAvailable) sendMain("update-available", info);
+    if (info?.updateAvailable) {
+      sendMain("update-available", info);
+      notifyInGameUpdate(info);
+    }
   } catch (err) {
     console.error("[StormPower] update check failed:", err?.message || err);
   }
@@ -501,7 +514,29 @@ app.whenReady().then(async () => {
     enqueue,
     onChange: onMenuChange,
     onSideChange: (side) => placeWindows(side),
+    onLocalAction: async (action, { on }) => {
+      if (action === "engine_mod") {
+        return engineMod.setInstalled(!!on);
+      }
+      if (action === "check_updates") {
+        const info = await appUpdater.checkForUpdates({ silent: false });
+        cachedUpdateInfo = info;
+        if (info?.updateAvailable) {
+          sendMain("update-available", info);
+          notifyInGameUpdate(info);
+          openUpdateScreen(info);
+          return { ok: true, message: info.message || `Update v${info.latest}` };
+        }
+        return { ok: true, message: info?.message || "Up to date" };
+      }
+      return { ok: false, message: "Unknown action" };
+    },
   });
+
+  try {
+    const em = engineMod.isInstalled();
+    menu.setToggle("engine_mod", !!em.installed);
+  } catch (_) {}
 
   createHttpBridge();
   createMainWindow();
@@ -581,6 +616,7 @@ ipcMain.on("set-detached", (_e, on) => setDetached(!!on));
 ipcMain.on("queue-command", (_e, line) => enqueue(line));
 ipcMain.handle("check-updates", async () => {
   cachedUpdateInfo = await appUpdater.checkForUpdates({ silent: false });
+  if (cachedUpdateInfo?.updateAvailable) notifyInGameUpdate(cachedUpdateInfo);
   return cachedUpdateInfo;
 });
 ipcMain.handle("apply-update", async () => {
