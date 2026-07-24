@@ -20,7 +20,33 @@ const defaultSettings = {
   count: 5,
   size: 1.0,
   dist: 20,
+  wave_height: 12,
+  wave_interval: 12,
+  wave_dist: 250,
+  wave_dir: "ahead",
+  wind_speed: 0,
 };
+
+const DIR_LABELS = {
+  ahead: "Ahead of you",
+  surround: "Surround (rotating)",
+  random: "Random each wave",
+  N: "From north",
+  NE: "From north-east",
+  E: "From east",
+  SE: "From south-east",
+  S: "From south",
+  SW: "From south-west",
+  W: "From west",
+  NW: "From north-west",
+};
+
+function formatCycleValue(item, value) {
+  if (item.cycle === "wave_dir") {
+    return DIR_LABELS[value] || String(value);
+  }
+  return `${value}${item.unit || ""}`;
+}
 
 function loadSettings() {
   try {
@@ -69,6 +95,7 @@ const MENU = {
   world: {
     title: "World",
     items: [
+      { label: "Waves & Wind", sub: "Wave engine, height, direction", goto: "waves" },
       { label: "Weather & Waves", sub: "One-shot weather / wave presets", goto: "weather" },
       { label: "Disasters", sub: "Tsunami, tornado, meteor…", goto: "disasters" },
       { label: "Explosions", sub: "Blasts around you (Weapons DLC)", goto: "explosions" },
@@ -84,23 +111,12 @@ const MENU = {
         cmd: "sirens_toggle",
       },
       {
-        label: "Massive Waves",
-        sub: "Live RAM tsunami boost — no restart",
-        toggle: "massive_waves",
-        cmd: "sea_toggle",
+        label: "Wave Engine",
+        sub: "Repeating tsunamis at your height setting",
+        toggle: "wave_engine",
+        local: "wave_engine",
       },
-      {
-        label: "Ultra Massive Waves",
-        sub: "Live RAM 120x tsunami — wrecks boats, no wind",
-        toggle: "ultra_waves",
-        cmd: "sea_toggle_ultra",
-      },
-      {
-        label: "Mega Wave Engine",
-        sub: "Locks live wave boost + shader for next boot",
-        toggle: "engine_mod",
-        local: "engine_mod",
-      },
+      { label: "Waves & Wind ▸", sub: "Height, interval, direction", goto: "waves" },
       {
         label: "Overrev Engine Power",
         sub: "Live RAM 25x Medium/Large torque",
@@ -292,16 +308,54 @@ const MENU = {
       { label: "Fire Bomb (large)", sub: "Explosive fire size 8", cmd: "firebomb", size: 8, emag: 4 },
     ],
   },
+  waves: {
+    title: "Waves & Wind",
+    items: [
+      {
+        label: "Wave Engine",
+        sub: "Repeating tsunamis at your height setting",
+        toggle: "wave_engine",
+        local: "wave_engine",
+      },
+      {
+        label: "Wave Height",
+        cycle: "wave_height",
+        unit: "x",
+        values: [1, 2, 3, 5, 8, 12, 18, 25, 40, 60, 90, 140],
+      },
+      {
+        label: "Wave Interval",
+        cycle: "wave_interval",
+        unit: "s",
+        values: [5, 8, 10, 12, 15, 20, 25, 30, 45, 60],
+      },
+      {
+        label: "Wave Distance",
+        cycle: "wave_dist",
+        unit: "m",
+        values: [100, 150, 200, 250, 300, 400, 600, 900, 1400],
+      },
+      {
+        label: "Wave Direction",
+        cycle: "wave_dir",
+        values: ["ahead", "surround", "random", "N", "NE", "E", "SE", "S", "SW", "W", "NW"],
+      },
+      {
+        label: "Wind Speed",
+        cycle: "wind_speed",
+        unit: "%",
+        values: [0, 10, 25, 40, 60, 80, 100],
+      },
+      { label: "Spawn One Wave", sub: "Single wall, current settings", local: "wave_once" },
+      { label: "Clear Waves", sub: "Cancel event and unlock memory", local: "wave_clear" },
+    ],
+  },
   weather: {
     title: "Weather & Waves",
     items: [
-      { label: "Clear / Calm Seas", sub: "No wind, flat water", cmd: "sea", mode: 0, wind: 0 },
-      { label: "Choppy Seas", sub: "Wind 0.72", cmd: "sea", mode: 1, wind: 0.72 },
-      { label: "Max Weather Waves", sub: "Wind 1.0 — tallest stock waves", cmd: "sea", mode: 1, wind: 1 },
-      { label: "Ultra Wind x5", sub: "Force shove only (not wave height)", cmd: "ultra_wind", wind: 5 },
-      { label: "Ultra Wind x10", sub: "Force shove only", cmd: "ultra_wind", wind: 10 },
-      { label: "50x Wind", sub: "Chaos shove — separate from Ultra Waves", cmd: "ultra_wind", wind: 50 },
-      { label: "Spawn One Mega Wave", sub: "Uses spawn distance in front of you", cmd: "mega_wave" },
+      { label: "Clear Waves + Wind", sub: "Stop engine, unlock RAM, calm seas", local: "wave_clear" },
+      { label: "Choppy Seas", sub: "Stock weather wind 72%", cmd: "sea", mode: 1, wind: 0.72 },
+      { label: "Max Stock Weather Waves", sub: "Wind 100% — not tsunami mode", cmd: "sea", mode: 1, wind: 1 },
       { label: "Despawn Siren Towers", sub: "Remove towers entirely", cmd: "sirens", mode: "kill" },
       { label: "Heavy Fog", cmd: "weather", fog: 1, rain: 0, wind: 0.2 },
       { label: "Heavy Rain + Wind", cmd: "weather", fog: 0.2, rain: 1, wind: 0.85 },
@@ -329,7 +383,14 @@ const MENU = {
   },
 };
 
-function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction, onToggle }) {
+function createMenuEngine({
+  enqueue,
+  onChange,
+  onSideChange,
+  onLocalAction,
+  onToggle,
+  onSettingChange,
+}) {
   const state = {
     open: false,
     stack: ["home"],
@@ -341,6 +402,7 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction, onTo
       boost: false,
       engine_mod: false,
       overrev_engine: false,
+      wave_engine: false,
       massive_waves: false,
       ultra_waves: false,
       sirens_muted: true,
@@ -412,8 +474,10 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction, onTo
         return toggleOn ? `sea|${peer}|4|1|${dist}` : `sea|${peer}|0|0|${dist}`;
       case "ultra_wind":
         return `ultra_wind|${peer}|${item.wind}`;
-      case "mega_wave":
-        return `mega_wave|${peer}|${dist}`;
+      case "mega_wave": {
+        const wd = Math.max(80, Math.floor(Number(s.wave_dist) || dist));
+        return `mega_wave|${peer}|${wd}|-1`;
+      }
       case "sirens":
         return `sirens|${peer}|${item.mode}`;
       case "sirens_toggle":
@@ -471,6 +535,21 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction, onTo
       state.cursor = 0;
       state.lastAction = "Opened " + item.label;
       notify();
+      return;
+    }
+
+    // Value cyclers: each press advances to the next preset and applies it live.
+    if (item.cycle) {
+      const values = item.values || [];
+      if (!values.length) return;
+      const cur = state.settings[item.cycle];
+      const idx = values.findIndex((v) => String(v) === String(cur));
+      const next = values[(idx + 1) % values.length];
+      state.settings[item.cycle] = next;
+      saveSettings(state.settings);
+      state.lastAction = `${item.label}: ${formatCycleValue(item, next)}`;
+      notify();
+      if (typeof onSettingChange === "function") onSettingChange(item.cycle, next);
       return;
     }
 
@@ -636,8 +715,9 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction, onTo
       items: p.items.map((it, i) => ({
         i: i + 1,
         label: it.label,
-        sub: it.sub || "",
+        sub: it.cycle ? formatCycleValue(it, state.settings[it.cycle]) : it.sub || "",
         folder: !!it.goto,
+        cycle: !!it.cycle,
         toggle: it.toggle || null,
         on: it.toggle ? !!state.toggles[it.toggle] : false,
         active: i === state.cursor,
@@ -662,7 +742,8 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction, onTo
       const it = snap.items[i];
       const mark = it.active ? ">" : " ";
       const tog = it.toggle ? (it.on ? " [ON]" : " [OFF]") : "";
-      lines.push(mark + it.i + " " + it.label + tog);
+      const val = it.cycle ? ": " + it.sub : "";
+      lines.push(mark + it.i + " " + it.label + tog + val);
     }
     if (snap.lastAction) lines.push(snap.lastAction);
     lines.push("[F4] close  [Bksp] back");

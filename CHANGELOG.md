@@ -1,5 +1,12 @@
 ﻿# StormPower Changelog
 
+## 1.7.0
+- Wave engine rebuilt: constant repeating tsunamis instead of one locked mega-wave
+- Default height 12x (boat-slamming); Clear Waves releases RAM lock then cancels gerstner
+- Configurable Waves & Wind page: height, interval, distance, wave direction, wind speed
+- Wave Direction: ahead / surround / random / compass bearings
+- Wind Speed is separate from wave height (Stormworks has no wind-direction API)
+
 ## 1.6.1
 - CRITICAL FIX: live memory helper could not run from inside app.asar — waves/overrev never patched RAM in the installed app
 - Helper is now copied to %TEMP% (and shipped in extraResources); freeze loop locks tsunami magnitude at 120× every 400ms

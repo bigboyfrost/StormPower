@@ -18,13 +18,13 @@ local ultra_wind = 0 -- visual/force push; waves still clamp to 0-1 internally f
 local sea_mode = 0
 local tsunami_timer = 0
 local tsunami_phase = 0 -- 0 wait, 1 just cancelled (spawn next)
-local wave_dist = 150
+local wave_dist = 250
 local wave_peer = 0
 local wave_pulse = 0 -- slight distance variation between crests
-local TSUNAMI_INTERVAL_NORMAL = 1800 -- 30 seconds
-local TSUNAMI_INTERVAL_ULTRA = 1800 -- 30 seconds — keeps live memory marker fresh
--- Giant crests must travel instead of being cancelled every few seconds.
-local TSUNAMI_INTERVAL_IMPOSSIBLE = 1800
+local wave_bearing = -1 -- -1 ahead of player, -2 random, 0-359 compass
+local wave_interval = 720 -- 12s fallback when the companion is not driving pulses
+local tick_now = 0
+local companion_pulse_at = -100000 -- last tick a companion mega_wave arrived
 local sirens_muted = true
 local tracked_sirens = {}
 local siren_refresh = 0
@@ -136,6 +136,25 @@ local function waveMatrix(peer_id, distance, lateral)
 		0,
 		pos[15] + lz * distance + rz * lateral
 	)
+end
+
+-- Wave epicenter placed on a compass bearing (0 = north, 90 = east).
+-- bearing -1 = whichever way the player faces, -2 = random each pulse.
+local function waveMatrixBearing(peer_id, distance, bearing)
+	distance = math.max(80, math.min(5000, distance or 250))
+	local pos, ok = server.getPlayerPos(peer_id)
+	if not ok then return nil end
+	local dx, dz
+	if bearing == nil or bearing <= -1.5 then
+		local a = math.random() * math.pi * 2
+		dx, dz = math.sin(a), math.cos(a)
+	elseif bearing < 0 then
+		dx, dz = lookFlat(peer_id)
+	else
+		local rad = math.rad(bearing % 360)
+		dx, dz = math.sin(rad), math.cos(rad)
+	end
+	return matrix.translation(pos[13] + dx * distance, 0, pos[15] + dz * distance)
 end
 
 local function getCharacter(peer_id)
@@ -285,50 +304,48 @@ local function killSirenTowers(peer_id)
 	return n
 end
 
-local function spawnMegaWaveNear(peer_id, dist)
-	-- Always spawn AHEAD of the player at spawn distance (never on top of them).
-	dist = math.max(80, dist or wave_dist or 150)
+-- API clamps magnitude to 0–1. 0.814759 is a unique Exact-Value marker so the
+-- StormPower companion can find it in RAM and rewrite the real height live.
+local WAVE_MARKER = 0.814759
+
+local function spawnMarkedWave(peer_id, dist, bearing)
+	dist = math.max(80, math.min(5000, dist or wave_dist or 250))
 	wave_dist = dist
 	wave_peer = peer_id
-	local mat = waveMatrix(peer_id, dist, 0)
+	local mat = waveMatrixBearing(peer_id, dist, bearing)
 	if not mat then
 		return false
 	end
-	-- API clamps magnitude to 0–1. 0.814759 is a unique Exact-Value marker so the
-	-- StormPower companion can find it in RAM and rewrite it live (no restart).
-	server.spawnTsunami(mat, 0.814759)
+	-- Cancel first: the engine ignores a new event weaker than the active one, and
+	-- the companion drops the held magnitude to 0 right before this call.
+	server.cancelGerstner()
+	server.spawnTsunami(mat, WAVE_MARKER)
 	if sirens_muted then
 		silenceSirens()
 	end
 	return true
 end
 
--- Mode 4: tall tsunami only (no whirlpools/meteors/wind). Height from mild engine shader.
+local function spawnMegaWaveNear(peer_id, dist)
+	return spawnMarkedWave(peer_id, dist, -1)
+end
+
+-- Mode 4: tall tsunami only (no whirlpools/meteors/wind). Height comes from the live RAM lock.
 local function spawnImpossibleWave(peer_id, dist)
-	dist = math.max(80, dist or wave_dist or 150)
-	wave_dist = dist
-	wave_peer = peer_id
 	wave_pulse = (wave_pulse or 0) + 1
 	local phase = wave_pulse % 3
-	local d = dist
-	if phase == 1 then d = dist * 0.92
-	elseif phase == 2 then d = dist * 1.12
+	local d = dist or wave_dist or 250
+	if phase == 1 then d = d * 0.92
+	elseif phase == 2 then d = d * 1.12
 	end
-	d = math.max(80, math.min(5000, d))
-	local mat = waveMatrix(peer_id, d, 0)
-	if not mat then return false end
-	server.spawnTsunami(mat, 0.814759)
-	if sirens_muted then silenceSirens() end
-	return true
+	return spawnMarkedWave(peer_id, d, wave_bearing)
 end
 
 local function pulseWaveCycle(peer_id)
-	-- Do NOT cancelGerstner first — that frees the event and drops our RAM locks.
-	-- spawnTsunami overrides the active event in place.
 	if sea_mode >= 4 then
 		spawnImpossibleWave(peer_id, wave_dist)
 	else
-		spawnMegaWaveNear(peer_id, wave_dist)
+		spawnMarkedWave(peer_id, wave_dist, wave_bearing)
 	end
 end
 
@@ -819,16 +836,14 @@ local function runCommand(line)
 			if mode >= 2 then
 				sirens_muted = true
 				silenceSirens()
-				server.cancelGerstner()
 				tsunami_phase = 1
-				pulseWaveCycle(peer_id)
-				if mode >= 4 then
-					notify(peer_id, "ULTRA WAVES @ " .. math.floor(dist) .. "m (live RAM boost)")
-					announce(peer_id, "Tall tsunami pulses ahead. StormPower rewrites wave magnitude in memory — no restart. Keep the overlay running.")
-				else
-					notify(peer_id, (mode >= 3 and "ULTRA " or "") .. "MASSIVE WAVES @ " .. math.floor(dist) .. "m (live)")
-					announce(peer_id, "Tsunami loop ahead at " .. math.floor(dist) .. "m. Companion applies live memory boost. Sirens muted.")
+				-- The companion drives pulses when it is connected; only self-pulse
+				-- for chat-command users so we never double-spawn.
+				if tick_now - companion_pulse_at > 1800 then
+					pulseWaveCycle(peer_id)
 				end
+				notify(peer_id, "WAVE ENGINE @ " .. math.floor(dist) .. "m")
+				announce(peer_id, "Repeating tsunamis inbound. Height is locked live by StormPower — keep the overlay running.")
 			else
 				server.cancelGerstner()
 				notify(peer_id, string.format("Sea state ON (wind %.2f)", weather_wind))
@@ -837,14 +852,37 @@ local function runCommand(line)
 
 	elseif cmd == "mega_wave" then
 		local dist = math.max(80, math.min(5000, num(p[3], session.dist)))
+		local bearing = num(p[4], wave_bearing)
 		wave_dist = dist
-		if spawnMegaWaveNear(peer_id, dist) then
-			setWeatherState(weather_fog, weather_rain, math.min(1, weather_wind > 0 and weather_wind or 1), 0)
-			if sirens_muted then silenceSirens() end
-			notify(peer_id, "Mega wave @ " .. math.floor(dist) .. "m ahead")
-		else
-			announce(peer_id, "Could not spawn mega wave")
+		wave_bearing = bearing
+		-- Companion is driving the cadence: stop the addon's own pulse timer.
+		companion_pulse_at = tick_now
+		if not spawnMarkedWave(peer_id, dist, bearing) then
+			announce(peer_id, "Could not spawn wave (need open water)")
 		end
+
+	elseif cmd == "wave_clear" then
+		sea_mode = 0
+		tsunami_timer = 0
+		tsunami_phase = 0
+		companion_pulse_at = -100000
+		server.cancelGerstner()
+		notify(peer_id, "Waves cleared")
+
+	elseif cmd == "wave_cfg" then
+		local dist = math.max(80, math.min(5000, num(p[3], wave_dist)))
+		local bearing = num(p[4], wave_bearing)
+		local interval = math.max(120, math.floor(num(p[5], wave_interval)))
+		wave_dist = dist
+		wave_bearing = bearing
+		wave_interval = interval
+		notify(peer_id, string.format("Waves: %dm, bearing %d, every %ds", math.floor(dist), math.floor(bearing), math.floor(interval / 60)))
+
+	elseif cmd == "wind" then
+		local w = math.max(0, math.min(1, num(p[3], 0)))
+		ultra_wind = 0
+		setWeatherState(weather_fog, weather_rain, w, 0)
+		notify(peer_id, string.format("Wind %d%%", math.floor(w * 100 + 0.5)))
 
 	elseif cmd == "chaos" then
 		local mode = tostring(p[3] or "on")
@@ -1042,6 +1080,7 @@ end
 
 function onTick(game_ticks)
 	local gt = game_ticks or 1
+	tick_now = tick_now + gt
 	tick_counter = tick_counter + gt
 	if tick_counter >= POLL_EVERY then
 		tick_counter = 0
@@ -1066,13 +1105,9 @@ function onTick(game_ticks)
 		end
 	end
 
-	if sea_mode >= 2 then
-		local interval = TSUNAMI_INTERVAL_NORMAL
-		if sea_mode >= 4 then
-			interval = TSUNAMI_INTERVAL_IMPOSSIBLE
-		elseif sea_mode >= 3 then
-			interval = TSUNAMI_INTERVAL_ULTRA
-		end
+	-- Self-pulse only when the companion is not driving the cadence (chat commands).
+	if sea_mode >= 2 and tick_now - companion_pulse_at > 1800 then
+		local interval = wave_interval
 		tsunami_timer = tsunami_timer + gt
 		if tsunami_timer >= interval then
 			tsunami_timer = 0

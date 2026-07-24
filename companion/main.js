@@ -60,16 +60,17 @@ function enqueue(cmd) {
   if (!line || line.length > 400) return false;
   commandQueue.push(line);
   if (commandQueue.length > 80) commandQueue.shift();
-  try {
-    const parts = line.split("|");
-    const head = (parts[0] || "").toLowerCase();
-    if (head === "mega_wave") liveMemory.kickWaveScan();
-    if (head === "sea") {
-      if (String(parts[2]) === "0") liveMemory.stopWaveLive();
-      else liveMemory.kickWaveScan();
-    }
-  } catch (_) {}
   return true;
+}
+
+function waveConfigFromSettings(overrides = {}) {
+  const s = { ...(menu?.settings || {}), ...overrides };
+  return {
+    height: Number(s.wave_height) || 12,
+    intervalMs: Math.max(3000, (Number(s.wave_interval) || 12) * 1000),
+    dist: Math.max(80, Number(s.wave_dist) || 250),
+    dir: String(s.wave_dir || "ahead"),
+  };
 }
 
 function sendMain(channel, payload) {
@@ -560,44 +561,69 @@ app.whenReady().then(async () => {
     onChange: onMenuChange,
     onSideChange: (side) => placeWindows(side),
     onToggle: (key, on) => {
-      const wavesOn =
-        !!(menu?.toggles?.massive_waves || menu?.toggles?.ultra_waves || menu?.toggles?.engine_mod);
-      if (key === "massive_waves" || key === "ultra_waves" || key === "engine_mod") {
-        if (wavesOn) liveMemory.startWaveLive();
-        else liveMemory.stopWaveLive();
-      }
       if (key === "overrev_engine") {
         if (on) liveMemory.startEngineLive();
         else liveMemory.stopEngineLive();
       }
+      if (key === "massive_waves" || key === "ultra_waves") {
+        if (on) liveMemory.startWaves(waveConfigFromSettings());
+        else liveMemory.stopWaves();
+      }
+    },
+    onSettingChange: (key, value) => {
+      if (key === "wind_speed") {
+        enqueue(`wind|${menu?.settings?.peer ?? 0}|${Number(value) / 100}`);
+        return;
+      }
+      if (key.startsWith("wave_")) {
+        const cfg = waveConfigFromSettings({ [key]: value });
+        liveMemory.setWaveConfig(cfg);
+        const bearing =
+          cfg.dir === "ahead" ? -1 : cfg.dir === "random" ? -2 : cfg.dir === "surround" ? -1 : ({ N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 }[cfg.dir] ?? -1);
+        enqueue(
+          `wave_cfg|${menu?.settings?.peer ?? 0}|${Math.round(cfg.dist)}|${bearing}|${Math.round(
+            cfg.intervalMs / 1000 * 60
+          )}`
+        );
+      }
     },
     onLocalAction: async (action, { on }) => {
+      if (action === "wave_engine") {
+        if (on) {
+          const st = liveMemory.startWaves(waveConfigFromSettings());
+          return {
+            ok: true,
+            installed: true,
+            message: `Wave engine ON — ${st.config.height}x every ${Math.round(
+              st.config.intervalMs / 1000
+            )}s`,
+          };
+        }
+        liveMemory.stopWaves();
+        return { ok: true, installed: false, message: "Wave engine OFF — seas cleared" };
+      }
+      if (action === "wave_once") {
+        liveMemory.setWaveConfig(waveConfigFromSettings());
+        const res = await liveMemory.pulseOnce();
+        return { ok: true, message: res.message || "Wave spawned" };
+      }
+      if (action === "wave_clear") {
+        liveMemory.stopWaves();
+        menu.setToggle("wave_engine", false);
+        menu.setToggle("massive_waves", false);
+        menu.setToggle("ultra_waves", false);
+        return { ok: true, message: "Waves cleared" };
+      }
       if (action === "engine_mod") {
         const res = engineMod.setInstalled(!!on);
-        if (on) {
-          liveMemory.startWaveLive();
-          if (res && res.ok) {
-            res.message =
-              "Mega Wave LIVE — scanning RAM for tsunami marker (keep Stormworks + overlay running). Shader also installed for next boot.";
-          }
-        } else {
-          const t = menu?.toggles || {};
-          if (!t.massive_waves && !t.ultra_waves) liveMemory.stopWaveLive();
-          const peer = menu?.settings?.peer ?? 0;
-          enqueue(`sea|${peer}|0|0|${menu?.settings?.dist || 20}`);
-        }
         return res;
       }
       if (action === "overrev_engine") {
         const res = engineMod.setOverrevInstalled(!!on);
         if (on) {
-          const live = liveMemory.startEngineLive();
+          liveMemory.startEngineLive();
           if (res && res.ok) {
-            res.message =
-              "Overrev LIVE — patching engine_max_force in Stormworks RAM now (no restart). File patch kept for next boot.";
-          }
-          if (live?.lastEngine?.message) {
-            // status fills on first scan tick
+            res.message = "Overrev LIVE — patching engine force in RAM (no restart)";
           }
         } else {
           liveMemory.stopEngineLive();
@@ -619,15 +645,24 @@ app.whenReady().then(async () => {
     },
   });
 
+  liveMemory.configure({
+    enqueue,
+    getPeer: () => menu?.settings?.peer ?? 0,
+  });
+  liveMemory.setWaveConfig(waveConfigFromSettings());
+
   try {
+    // The old 900m shader only scaled the *visuals*; physics stayed at stock, so
+    // giant-looking waves passed through boats. Height now comes from the live
+    // magnitude lock, which drives physics and visuals together.
     const em = engineMod.isInstalled();
-    menu.setToggle("engine_mod", !!em.installed);
-    // Refresh mild shader if an older aggressive patch was left installed
+    menu.setToggle("engine_mod", false);
     if (em.installed) {
-      engineMod.install();
+      engineMod.uninstall();
     }
     const overrev = engineMod.isOverrevInstalled();
     menu.setToggle("overrev_engine", !!overrev.installed);
+    if (overrev.installed) liveMemory.startEngineLive();
   } catch (_) {}
 
   createHttpBridge();
@@ -678,6 +713,9 @@ app.on("will-quit", () => {
   } catch (_) {}
   try {
     globalShortcut.unregisterAll();
+  } catch (_) {}
+  try {
+    liveMemory.shutdown();
   } catch (_) {}
 });
 
