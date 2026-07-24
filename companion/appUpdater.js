@@ -5,6 +5,8 @@
 const { autoUpdater } = require("electron-updater");
 const https = require("https");
 const fs = require("fs");
+const path = require("path");
+const { spawn, execFile } = require("child_process");
 const { isPackaged, changelogPath, readAppVersion } = require("./paths");
 
 autoUpdater.autoDownload = false;
@@ -12,6 +14,88 @@ autoUpdater.autoInstallOnAppQuit = true;
 
 let lastInfo = null;
 let progressCb = null;
+
+/** Kill every StormPower.exe except this process so NSIS can replace files. */
+function killOtherStormPowerProcesses() {
+  return new Promise((resolve) => {
+    if (process.platform !== "win32") {
+      resolve();
+      return;
+    }
+    const myPid = String(process.pid);
+    execFile(
+      "tasklist",
+      ["/FI", "IMAGENAME eq StormPower.exe", "/FO", "CSV", "/NH"],
+      { windowsHide: true },
+      (err, stdout) => {
+        if (err || !stdout) {
+          resolve();
+          return;
+        }
+        const pids = [];
+        for (const line of String(stdout).split(/\r?\n/)) {
+          // "StormPower.exe","1234","Session Name","1","12,345 K"
+          const m = line.match(/"StormPower\.exe","(\d+)"/i);
+          if (m && m[1] !== myPid) pids.push(m[1]);
+        }
+        if (!pids.length) {
+          resolve();
+          return;
+        }
+        let left = pids.length;
+        for (const pid of pids) {
+          execFile("taskkill", ["/F", "/PID", pid], { windowsHide: true }, () => {
+            left -= 1;
+            if (left <= 0) resolve();
+          });
+        }
+      }
+    );
+  });
+}
+
+/**
+ * If a previous update downloaded but never applied (common when multiple
+ * StormPower processes were locking files), run the pending NSIS installer now.
+ * Only fires when the pending package is newer than the running app.
+ */
+function finishPendingInstallIfAny() {
+  try {
+    if (process.platform !== "win32") return false;
+    const base = path.join(process.env.LOCALAPPDATA || "", "stormpower-updater");
+    const installer = path.join(base, "installer.exe");
+    const infoPath = path.join(base, "pending", "update-info.json");
+    if (!fs.existsSync(installer) || !fs.existsSync(infoPath)) return false;
+
+    let fileName = "";
+    try {
+      fileName = String(JSON.parse(fs.readFileSync(infoPath, "utf8")).fileName || "");
+    } catch (_) {
+      return false;
+    }
+    const m = fileName.match(/(\d+\.\d+\.\d+)/);
+    if (!m) return false;
+    const pendingVer = m[1];
+    const current = readAppVersion();
+    if (cmpSemver(pendingVer, current) <= 0) {
+      // Stale leftover — clear it so we do not reinstall forever.
+      try {
+        fs.unlinkSync(installer);
+      } catch (_) {}
+      return false;
+    }
+
+    const child = spawn(installer, ["/S"], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.unref();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 function emitProgress(message) {
   const msg = typeof message === "string" ? message : (message && message.message) || "";
@@ -235,9 +319,12 @@ async function downloadAndInstall(onProgress) {
   }
 
   wireEvents();
+  emitProgress("Preparing install (closing other StormPower windows)...");
+  await killOtherStormPowerProcesses();
   emitProgress("Downloading update...");
   await autoUpdater.downloadUpdate();
   emitProgress("Installing and restarting...");
+  await killOtherStormPowerProcesses();
   setImmediate(() => {
     autoUpdater.quitAndInstall(false, true);
   });
@@ -258,4 +345,6 @@ module.exports = {
   setProgressHandler,
   getCachedInfo,
   isPackaged,
+  killOtherStormPowerProcesses,
+  finishPendingInstallIfAny,
 };

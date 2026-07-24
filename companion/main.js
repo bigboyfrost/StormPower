@@ -38,6 +38,20 @@ const UPDATE_H = 640;
 const UPDATE_UI_ONLY = process.argv.includes("--update-ui");
 const UPDATE_POLL_MS = 2 * 60 * 1000; // check while running
 const UPDATE_THROTTLE_MS = 45 * 1000;
+
+// One instance only — orphaned copies lock files and break NSIS updates.
+const gotSingleInstanceLock = UPDATE_UI_ONLY ? true : app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else if (!UPDATE_UI_ONLY) {
+  app.on("second-instance", () => {
+    try {
+      if (menu && !menu.open) menu.setOpen(true);
+      showMainWindow();
+      showToggleAlways();
+    } catch (_) {}
+  });
+}
 const UPDATE_INGAME_RESEND_MS = 18 * 1000; // keep nagging until they update
 
 function mainWindowHeight() {
@@ -564,6 +578,8 @@ function startLowLevelKeys() {
 }
 
 app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) return;
+
   // Dedicated updater UI (update.bat / npm run update)
   // NOTE: never install staged files while Electron is running — Windows locks .js
   if (UPDATE_UI_ONLY) {
@@ -571,6 +587,15 @@ app.whenReady().then(async () => {
     console.log("[StormPower] update UI mode");
     return;
   }
+
+  // Heal a half-finished update from a previous run (pending NSIS left behind).
+  try {
+    if (appUpdater.finishPendingInstallIfAny()) {
+      console.log("[StormPower] finishing pending update installer…");
+      setTimeout(() => app.quit(), 800);
+      return;
+    }
+  } catch (_) {}
 
   syncStormworksAddon();
   cleanupLeftoverInstallers();
