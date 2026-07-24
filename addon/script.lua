@@ -22,6 +22,7 @@ local wave_dist = 250
 local wave_peer = 0
 local wave_pulse = 0 -- slight distance variation between crests
 local wave_bearing = -1 -- -1 ahead of player, -2 random, 0-359 compass
+local wave_mag = nil -- last magnitude the companion asked for (nil = use marker)
 local wave_interval = 720 -- 12s fallback when the companion is not driving pulses
 local tick_now = 0
 local companion_pulse_at = -100000 -- last tick a companion mega_wave arrived
@@ -80,8 +81,11 @@ local function notify(peer_id, msg)
 	end
 end
 
+-- Companion appends "t=<tag>" so a switch can despawn exactly what it spawned.
+local current_tag = nil
+
 local function track(kind, id)
-	spawned[#spawned + 1] = { kind = kind, id = id }
+	spawned[#spawned + 1] = { kind = kind, id = id, tag = current_tag }
 end
 
 local function split(str, sep)
@@ -219,6 +223,23 @@ local function cleanup(peer_id)
 	notify(peer_id, "Cleaned " .. n)
 end
 
+local function despawnTag(peer_id, tag)
+	local n = 0
+	for i = #spawned, 1, -1 do
+		local e = spawned[i]
+		if e.tag == tag then
+			if e.kind == "object" then
+				if server.despawnObject(e.id, true) then n = n + 1 end
+			elseif e.kind == "vehicle" then
+				if server.despawnVehicle(e.id, true) then n = n + 1 end
+			end
+			table.remove(spawned, i)
+		end
+	end
+	notify(peer_id, "Removed " .. n)
+	return n
+end
+
 local function applyWeather()
 	-- Keep stock wave height via clamp 0-1, but also re-apply ultra_wind each tick
 	-- so force/fx get the higher value when the engine accepts it.
@@ -312,7 +333,7 @@ end
 -- StormPower companion can find it in RAM and rewrite the real height live.
 local WAVE_MARKER = 0.814759
 
-local function spawnMarkedWave(peer_id, dist, bearing)
+local function spawnMarkedWave(peer_id, dist, bearing, mag)
 	dist = math.max(80, math.min(5000, dist or wave_dist or 250))
 	wave_dist = dist
 	wave_peer = peer_id
@@ -323,11 +344,15 @@ local function spawnMarkedWave(peer_id, dist, bearing)
 	-- Cancel first: the engine ignores a new event weaker than the active one, and
 	-- the companion drops the held magnitude to 0 right before this call.
 	server.cancelGerstner()
-	server.spawnTsunami(mat, WAVE_MARKER)
+	-- Marker magnitude only helps while the companion can find it in RAM. Without
+	-- that, 1.0 is the tallest wave the API itself will give us.
+	local m = mag or wave_mag or WAVE_MARKER
+	if m <= 0 or m > 1 then m = 1 end
+	local ok_spawn = server.spawnTsunami(mat, m)
 	if sirens_muted then
 		silenceSirens()
 	end
-	return true
+	return ok_spawn ~= false
 end
 
 local function spawnMegaWaveNear(peer_id, dist)
@@ -676,6 +701,16 @@ local function runCommand(line)
 	local cmd = p[1]
 	local peer_id = resolvePeer(math.floor(num(p[2], 0)))
 
+	current_tag = nil
+	for i = #p, 3, -1 do
+		local t = string.match(p[i], "^t=(.+)$")
+		if t then
+			current_tag = t
+			p[i] = nil
+			break
+		end
+	end
+
 	if cmd == "spawn_animal" then
 		local id = math.floor(num(p[3], 0))
 		local count = math.max(1, math.floor(num(p[4], 1)))
@@ -784,15 +819,26 @@ local function runCommand(line)
 			mat = frontMatrix(peer_id, dist, 0)
 		end
 		if mat then
-			if kind == "tsunami" then server.spawnTsunami(mat, 1.5)
-			elseif kind == "whirlpool" then server.spawnWhirlpool(mat, 3.0)
-			elseif kind == "tornado" then server.spawnTornado(mat)
-			elseif kind == "meteor" then server.spawnMeteor(mat, 0.6, false)
-			elseif kind == "shower" then server.spawnMeteorShower(mat, 0.6, false)
-			elseif kind == "volcano" then server.spawnVolcano(mat)
+			-- Every magnitude here is clamped 0-1 by the game; anything above was
+			-- silently rejected, which is why the bigger presets did nothing.
+			local ok = false
+			if kind == "tsunami" then
+				server.cancelGerstner()
+				ok = server.spawnTsunami(mat, 1)
+			elseif kind == "whirlpool" then
+				server.cancelGerstner()
+				ok = server.spawnWhirlpool(mat, 1)
+			elseif kind == "tornado" then ok = server.spawnTornado(mat)
+			elseif kind == "meteor" then ok = server.spawnMeteor(mat, 1, false)
+			elseif kind == "shower" then ok = server.spawnMeteorShower(mat, 1, false)
+			elseif kind == "volcano" then ok = server.spawnVolcano(mat)
 			end
 			if sirens_muted then silenceSirens() end
-			notify(peer_id, "Disaster @ " .. math.floor(dist) .. "m ahead")
+			if ok == false then
+				notify(peer_id, "Could not spawn " .. tostring(kind) .. " here")
+			else
+				notify(peer_id, "Disaster @ " .. math.floor(dist) .. "m ahead")
+			end
 		end
 
 	elseif cmd == "weather" then
@@ -856,12 +902,15 @@ local function runCommand(line)
 	elseif cmd == "mega_wave" then
 		local dist = math.max(80, math.min(5000, num(p[3], session.dist)))
 		local bearing = num(p[4], wave_bearing)
+		local mag = num(p[5], WAVE_MARKER)
 		wave_dist = dist
 		wave_bearing = bearing
+		wave_mag = mag
 		-- Companion is driving the cadence: stop the addon's own pulse timer.
 		companion_pulse_at = tick_now
-		if not spawnMarkedWave(peer_id, dist, bearing) then
-			announce(peer_id, "Could not spawn wave (need open water)")
+		if sea_mode < 4 then sea_mode = 4 end
+		if not spawnMarkedWave(peer_id, dist, bearing, mag) then
+			notify(peer_id, "Wave rejected here — need deeper open water (try a bigger Wave Distance)")
 		end
 
 	elseif cmd == "wave_clear" then
@@ -1014,6 +1063,13 @@ local function runCommand(line)
 		local research = server.getResearchPoints()
 		server.setCurrency(money + 100000, research)
 		notify(peer_id, "+$100000")
+
+	elseif cmd == "despawn_tag" then
+		despawnTag(peer_id, tostring(p[3] or ""))
+
+	elseif cmd == "disaster_cancel" then
+		server.cancelGerstner()
+		notify(peer_id, "Ocean event cancelled")
 
 	elseif cmd == "cleanup" then
 		cleanup(peer_id)

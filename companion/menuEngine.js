@@ -56,11 +56,22 @@ function formatCycleValue(item, value) {
 }
 
 function loadSettings() {
+  let s;
   try {
-    return { ...defaultSettings, ...JSON.parse(fs.readFileSync(settingsFile(), "utf8")) };
+    s = { ...defaultSettings, ...JSON.parse(fs.readFileSync(settingsFile(), "utf8")) };
   } catch (_) {
-    return { ...defaultSettings };
+    s = { ...defaultSettings };
   }
+  // Old builds let the drag bars save values that break spawning: a 1m distance
+  // puts disasters inside the player and leaves no open water for a tsunami.
+  const dist = Number(s.dist);
+  if (!Number.isFinite(dist) || dist < 20) s.dist = defaultSettings.dist;
+  const size = Number(s.size);
+  if (!Number.isFinite(size) || size <= 0 || size > 20) s.size = defaultSettings.size;
+  const count = Number(s.count);
+  if (!Number.isFinite(count) || count < 1) s.count = 1;
+  s.count = Math.min(50, Math.floor(s.count));
+  return s;
 }
 
 function saveSettings(s) {
@@ -154,6 +165,30 @@ const MENU = {
         label: "Check for Updates",
         sub: "Look for a new StormPower release",
         local: "check_updates",
+      },
+      {
+        label: "Spawn Distance",
+        sub: "‹› how far ahead things appear",
+        cycle: "dist",
+        unit: "m",
+        stm: true,
+        values: [20, 50, 100, 150, 200, 300, 500, 800, 1200, 2000],
+      },
+      {
+        label: "Spawn Amount",
+        sub: "‹› how many per switch flip",
+        cycle: "count",
+        unit: "x",
+        stm: true,
+        values: [1, 2, 3, 5, 8, 12, 20, 35, 50],
+      },
+      {
+        label: "Spawn Size",
+        sub: "‹› scale for animals and creatures",
+        cycle: "size",
+        unit: "x",
+        stm: true,
+        values: [0.5, 1, 1.5, 2, 3, 5, 8, 12, 20],
       },
       { label: "Clean Up Spawns", sub: "Remove StormPower spawns", cmd: "cleanup" },
     ],
@@ -409,6 +444,7 @@ function createMenuEngine({
     settings: loadSettings(),
     lastAction: "",
     search: "",
+    active: {},
     toggles: {
       chaos: false,
       boost: false,
@@ -478,20 +514,38 @@ function createMenuEngine({
     return Math.max(1, Math.min(5000, Math.floor(Number(state.settings.dist) || 20)));
   }
 
+  // Rows whose spawns can be removed again: switch OFF despawns exactly what it spawned.
+  const DESPAWNABLE = new Set(["spawn_animal", "spawn_creature", "spawn_object"]);
+  // Tsunami/whirlpool are gerstner events — cancelGerstner takes them back down.
+  const GERSTNER = new Set(["tsunami", "whirlpool"]);
+
+  function itemTag(item) {
+    const base = `${item.cmd || item.local || "x"}_${item.id !== undefined ? item.id : item.label}`;
+    return base.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40);
+  }
+
+  function isStateful(item) {
+    if (!item || !item.cmd) return false;
+    if (DESPAWNABLE.has(item.cmd)) return true;
+    if (item.cmd === "disaster" && GERSTNER.has(item.id)) return true;
+    return false;
+  }
+
   function buildCommand(item, toggleOn) {
     const s = state.settings;
     const peer = peerId();
     const count = Math.max(1, Math.floor(Number(s.count) || 1));
     const size = Math.max(0.5, Number(s.size) || 1);
     const dist = distM();
+    const tag = `|t=${itemTag(item)}`;
 
     switch (item.cmd) {
       case "spawn_animal":
-        return `spawn_animal|${peer}|${item.id}|${count}|${size}|${dist}`;
+        return `spawn_animal|${peer}|${item.id}|${count}|${size}|${dist}${tag}`;
       case "spawn_creature":
-        return `spawn_creature|${peer}|${item.id}|${count}|${size}|${dist}`;
+        return `spawn_creature|${peer}|${item.id}|${count}|${size}|${dist}${tag}`;
       case "spawn_object":
-        return `spawn_object|${peer}|${item.id}|${count}|${dist}`;
+        return `spawn_object|${peer}|${item.id}|${count}|${dist}${tag}`;
       case "give":
         return `give|${peer}|${item.id}|${item.slot}|${item.int}|${item.float}|${count}`;
       case "outfit":
@@ -636,6 +690,9 @@ function createMenuEngine({
       if (item.toggle) {
         next = !state.toggles[item.toggle];
         state.toggles[item.toggle] = next;
+      } else {
+        // One-shot local action: show the switch move, then spring back.
+        pulseActive(itemTag(item), item.label + "…");
       }
       state.lastAction = item.label + "…";
       notify();
@@ -669,8 +726,7 @@ function createMenuEngine({
     // Cycle-only rows: switch re-applies the current value (arrows already set it).
     if (item.cycle && item.values) {
       const cur = state.settings[item.cycle];
-      state.lastAction = `${item.label}: ${formatCycleValue(item, cur)}`;
-      notify();
+      pulseActive(itemTag(item), `${item.label}: ${formatCycleValue(item, cur)}`);
       if (typeof onSettingChange === "function") onSettingChange(item.cycle, cur);
       return;
     }
@@ -715,12 +771,48 @@ function createMenuEngine({
       notify();
       return;
     }
+
+    const tag = itemTag(item);
+
+    // Stateful rows: switch ON spawns, switch OFF removes what this row spawned.
+    if (isStateful(item)) {
+      if (state.active[tag]) {
+        const peer = peerId();
+        if (item.cmd === "disaster") enqueue(`disaster_cancel|${peer}`);
+        else enqueue(`despawn_tag|${peer}|${tag}`);
+        delete state.active[tag];
+        state.lastAction = `${item.label}: removed`;
+        notify();
+        return;
+      }
+      const line = buildCommand(item);
+      if (line) {
+        enqueue(line);
+        state.active[tag] = true;
+        const n = Math.max(1, Math.floor(Number(state.settings.count) || 1));
+        state.lastAction = `${item.label}: ${item.cmd === "disaster" ? "active" : `spawned ×${n}`}`;
+        notify();
+      }
+      return;
+    }
+
+    // Momentary rows (gear, explosions, one-shot disasters): the switch fires and
+    // springs back, because the game gives us no way to take these back.
     const line = buildCommand(item);
     if (line) {
       enqueue(line);
-      state.lastAction = "Sent: " + item.label;
-      notify();
+      pulseActive(tag, `Sent: ${item.label}`);
     }
+  }
+
+  function pulseActive(tag, message) {
+    state.active[tag] = true;
+    state.lastAction = message;
+    notify();
+    setTimeout(() => {
+      delete state.active[tag];
+      notify();
+    }, 900);
   }
 
   function back() {
@@ -834,6 +926,11 @@ function createMenuEngine({
         } else if (it.toggle) {
           stmValue = `×${Math.max(1, Math.floor(Number(state.settings.count) || 1))}`;
         }
+        const on = it.toggle
+          ? !!state.toggles[it.toggle]
+          : it.goto
+            ? false
+            : !!state.active[itemTag(it)];
         return {
           i: i + 1,
           label: it.label,
@@ -843,7 +940,7 @@ function createMenuEngine({
           stm: !!(it.stm || it.toggle || it.cycle || it.cmd || it.local),
           stmValue,
           toggle: it.toggle || null,
-          on: it.toggle ? !!state.toggles[it.toggle] : false,
+          on,
           active: i === state.cursor,
         };
       }),

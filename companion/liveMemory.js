@@ -238,10 +238,39 @@ function bearingForPulse() {
   return Number.isFinite(n) ? ((Math.round(n) % 360) + 360) % 360 : -1;
 }
 
+// The RAM lock is a bonus, not a requirement. Until it proves itself we spawn at
+// magnitude 1.0 so the waves are at least as big as the game can make them alone.
+let memLockOk = false;
+let scanBusy = false;
+let lastScanAt = 0;
+const SCAN_COOLDOWN_MS = 60000;
+
 function spawnWaveCommand(bearing) {
   if (typeof hooks.enqueue !== "function") return;
   const peer = hooks.getPeer();
-  hooks.enqueue(`mega_wave|${peer}|${Math.round(cfg.dist)}|${bearing}`);
+  const mag = memLockOk ? WAVE_MARKER : 1;
+  hooks.enqueue(`mega_wave|${peer}|${Math.round(cfg.dist)}|${bearing}|${mag}`);
+}
+
+/** Full memory scan, off the pulse path so a slow scan never skips a wave. */
+function scanInBackground() {
+  if (scanBusy || Date.now() - lastScanAt < SCAN_COOLDOWN_MS) return;
+  scanBusy = true;
+  lastScanAt = Date.now();
+  waveChannel
+    .send("scan", 90000)
+    .then((scan) => {
+      memLockOk = !!(scan && scan.locked > 0);
+      lastWave = {
+        ok: !!(scan && scan.ok),
+        message: (scan && (scan.message || scan.error)) || "scan",
+        locked: (scan && scan.locked) || 0,
+      };
+    })
+    .catch(() => {})
+    .finally(() => {
+      scanBusy = false;
+    });
 }
 
 async function runPulse() {
@@ -250,24 +279,21 @@ async function runPulse() {
   try {
     // Drop the held magnitude to 0 first: the game ignores a new tsunami that is
     // weaker than the active one, which is why a frozen wave blocked every respawn.
-    await waveChannel.send("release", 8000);
+    if (memLockOk) await waveChannel.send("release", 4000);
     spawnWaveCommand(bearingForPulse());
 
-    for (let i = 0; i < 10 && waveEnabled; i++) {
+    for (let i = 0; i < 6 && waveEnabled; i++) {
       await sleep(150);
-      const res = await waveChannel.send("freeze", 8000);
+      const res = await waveChannel.send("freeze", 4000);
       if (res && res.locked > 0) {
+        memLockOk = true;
         lastWave = { ok: true, message: res.message, locked: res.locked };
         return;
       }
     }
-    // Cache miss (first run, or the game moved the event): pay for a full scan once.
-    const scan = await waveChannel.send("scan", 90000);
-    lastWave = {
-      ok: !!scan.ok,
-      message: scan.message || scan.error || "scan",
-      locked: scan.locked || 0,
-    };
+    memLockOk = false;
+    lastWave = { ok: true, message: "stock height (memory lock unavailable)", locked: 0 };
+    scanInBackground();
   } finally {
     pulseBusy = false;
   }
@@ -289,6 +315,16 @@ function startWaves(partial) {
   if (partial) setWaveConfig(partial);
   waveEnabled = true;
   waveChannel.send(`set ${WAVE_MARKER} ${cfg.height}`).catch(() => {});
+  // Hand the cadence to the addon too: if this app or the memory daemon stalls,
+  // the game keeps pulsing waves on its own instead of stopping dead.
+  if (typeof hooks.enqueue === "function") {
+    const fallbackBearing = String(cfg.dir).toLowerCase() === "surround" ? -1 : bearingForPulse();
+    hooks.enqueue(
+      `wave_cfg|${hooks.getPeer()}|${Math.round(cfg.dist)}|${fallbackBearing}|${Math.round(
+        (cfg.intervalMs / 1000) * 60
+      )}`
+    );
+  }
   if (!pulseTimer) {
     runPulse();
     pulseTimer = setInterval(runPulse, cfg.intervalMs);
@@ -319,20 +355,21 @@ function stopWaves({ clearCache = true } = {}) {
 /** One wave right now, using current height/direction, without starting the loop. */
 async function pulseOnce() {
   waveChannel.send(`set ${WAVE_MARKER} ${cfg.height}`).catch(() => {});
-  await waveChannel.send("release", 8000);
+  if (memLockOk) await waveChannel.send("release", 4000);
   spawnWaveCommand(bearingForPulse());
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 6; i++) {
     await sleep(150);
-    const res = await waveChannel.send("freeze", 8000);
+    const res = await waveChannel.send("freeze", 4000);
     if (res && res.locked > 0) {
+      memLockOk = true;
       lastWave = { ok: true, message: res.message, locked: res.locked };
       if (!freezeTimer) freezeTimer = setInterval(freezeTick, 400);
       return lastWave;
     }
   }
-  const scan = await waveChannel.send("scan", 90000);
-  lastWave = { ok: !!scan.ok, message: scan.message || scan.error || "scan", locked: scan.locked || 0 };
-  if (!freezeTimer && lastWave.locked > 0) freezeTimer = setInterval(freezeTick, 400);
+  memLockOk = false;
+  lastWave = { ok: true, message: "Wave spawned (stock height)", locked: 0 };
+  scanInBackground();
   return lastWave;
 }
 

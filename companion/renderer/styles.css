@@ -173,8 +173,8 @@ h1 {
 }
 
 .stm-value {
-  min-width: 64px;
-  max-width: 110px;
+  min-width: 58px;
+  max-width: 96px;
   text-align: center;
   font-size: 12px;
   font-weight: 700;
@@ -512,8 +512,8 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .ios-switch {
-  width: 51px;
-  height: 31px;
+  width: 46px;
+  height: 28px;
   border-radius: 999px;
   border: none;
   padding: 0;
@@ -534,8 +534,8 @@ input[type="range"]::-webkit-slider-thumb {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 27px;
-  height: 27px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
@@ -543,7 +543,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .ios-switch.on .ios-knob {
-  transform: translateX(20px);
+  transform: translateX(18px);
 }
 
 .list li.active {
