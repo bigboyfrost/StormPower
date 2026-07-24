@@ -131,9 +131,9 @@
       setDetachedUi(!!cfg.detached);
     });
     updateBtn.addEventListener("click", async () => {
-      updateText.textContent = "Updating…";
-      const res = await window.stormpower.applyUpdate();
-      updateText.textContent = res?.message || (res?.applied ? "Updated — restart" : "Update failed");
+      updateText.textContent = "Opening updater…";
+      await window.stormpower.openUpdateUi();
+      updateText.textContent = "Update available";
     });
   }
 

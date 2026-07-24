@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("stormpower", {
   setDetached: (detached) => ipcRenderer.send("set-detached", !!detached),
   checkUpdates: () => ipcRenderer.invoke("check-updates"),
   applyUpdate: () => ipcRenderer.invoke("apply-update"),
+  openUpdateUi: () => ipcRenderer.invoke("open-update-ui"),
   onState: (cb) => ipcRenderer.on("menu-state", (_e, s) => cb(s)),
   onStatus: (cb) => ipcRenderer.on("bridge-status", (_e, s) => cb(s)),
   onUpdate: (cb) => ipcRenderer.on("update-available", (_e, info) => cb(info)),

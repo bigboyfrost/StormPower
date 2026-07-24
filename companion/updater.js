@@ -10,6 +10,7 @@ const { execFileSync } = require("child_process");
 const ROOT = path.resolve(__dirname, "..");
 const VERSION_FILE = path.join(ROOT, "VERSION");
 const CONFIG_FILE = path.join(ROOT, "update-config.json");
+const CHANGELOG_FILE = path.join(ROOT, "CHANGELOG.md");
 
 function readJson(file, fallback) {
   try {
@@ -44,6 +45,37 @@ function cmpSemver(a, b) {
     if ((pa[i] || 0) < (pb[i] || 0)) return -1;
   }
   return 0;
+}
+
+/** Extract notes for versions newer than `sinceVersion` (exclusive). Falls back to latest section. */
+function notesFromChangelog(sinceVersion) {
+  try {
+    const raw = fs.readFileSync(CHANGELOG_FILE, "utf8");
+    const since = String(sinceVersion || "0.0.0").replace(/^v/i, "");
+    const parts = raw.split(/^##\s+/m).filter(Boolean);
+    const blocks = [];
+    for (const part of parts) {
+      const nl = part.indexOf("\n");
+      const heading = (nl >= 0 ? part.slice(0, nl) : part).trim();
+      const body = (nl >= 0 ? part.slice(nl + 1) : "").trim();
+      const ver = heading.replace(/^v/i, "").split(/\s+/)[0];
+      if (!/^\d+\.\d+/.test(ver)) continue;
+      if (cmpSemver(ver, since) > 0) {
+        blocks.push(`## ${heading}\n${body}`);
+      }
+    }
+    if (blocks.length) return blocks.join("\n\n");
+    // Fallback: newest version section in the file
+    for (const part of parts) {
+      const nl = part.indexOf("\n");
+      const heading = (nl >= 0 ? part.slice(0, nl) : part).trim();
+      const body = (nl >= 0 ? part.slice(nl + 1) : "").trim();
+      if (/^\d+\.\d+/.test(heading.replace(/^v/i, ""))) {
+        return `## ${heading}\n${body}`;
+      }
+    }
+  } catch (_) {}
+  return "";
 }
 
 function httpsGetJson(url) {
@@ -99,14 +131,19 @@ function downloadFile(url, dest) {
   });
 }
 
-async function checkForUpdates({ silent = true, apply = false } = {}) {
+async function checkForUpdates({ silent = true, apply = false, onProgress } = {}) {
   const cfg = getConfig();
   const current = localVersion();
+  const progress = (message) => {
+    if (typeof onProgress === "function") onProgress({ message });
+  };
+
   if (!cfg.owner) {
     return {
       updateAvailable: false,
       current,
       latest: current,
+      notes: notesFromChangelog(current),
       message: "Repo not configured yet (run once after GitHub publish).",
     };
   }
@@ -114,18 +151,21 @@ async function checkForUpdates({ silent = true, apply = false } = {}) {
   let latest = current;
   let zipUrl = "";
   let htmlUrl = "";
+  let notes = "";
 
   try {
+    progress("Fetching latest release…");
     const release = await httpsGetJson(
       `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/releases/latest`
     );
     latest = (release.tag_name || release.name || current).replace(/^v/i, "");
     htmlUrl = release.html_url || "";
+    notes = String(release.body || "").trim();
     const asset = (release.assets || []).find((a) => /stormpower.*\.zip$/i.test(a.name));
     zipUrl = asset?.browser_download_url || release.zipball_url || "";
   } catch (_) {
-    // Fall back to VERSION file on main branch
     try {
+      progress("Reading VERSION from branch…");
       const raw = await new Promise((resolve, reject) => {
         https
           .get(
@@ -144,9 +184,18 @@ async function checkForUpdates({ silent = true, apply = false } = {}) {
       htmlUrl = `https://github.com/${cfg.owner}/${cfg.repo}`;
     } catch (err) {
       if (!silent) throw err;
-      return { updateAvailable: false, current, latest: current, message: err.message };
+      return {
+        updateAvailable: false,
+        current,
+        latest: current,
+        notes: notesFromChangelog(current),
+        message: err.message,
+      };
     }
   }
+
+  if (!notes) notes = notesFromChangelog(current);
+  if (!notes) notes = `## ${latest}\n- StormPower update available.`;
 
   const updateAvailable = cmpSemver(latest, current) > 0;
   const info = {
@@ -155,22 +204,24 @@ async function checkForUpdates({ silent = true, apply = false } = {}) {
     latest,
     htmlUrl,
     zipUrl,
+    notes,
+    changelog: notes,
     owner: cfg.owner,
     repo: cfg.repo,
   };
 
   if (!apply || !updateAvailable) return info;
 
-  // Apply: download zip and extract over project (keeps node_modules if present)
   const tmpZip = path.join(ROOT, "_update.zip");
   const tmpDir = path.join(ROOT, "_update_extract");
+  progress(`Downloading v${latest}…`);
   console.log(`[updater] downloading ${latest}…`);
   await downloadFile(zipUrl, tmpZip);
 
+  progress("Extracting update…");
   if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
   fs.mkdirSync(tmpDir, { recursive: true });
 
-  // Use tar (Windows 10+) or PowerShell Expand-Archive
   try {
     execFileSync("tar", ["-xf", tmpZip, "-C", tmpDir], { stdio: "ignore" });
   } catch (_) {
@@ -181,9 +232,23 @@ async function checkForUpdates({ silent = true, apply = false } = {}) {
     );
   }
 
+  progress("Installing files…");
   const entries = fs.readdirSync(tmpDir).map((n) => path.join(tmpDir, n));
   const srcRoot = entries.find((p) => fs.statSync(p).isDirectory()) || tmpDir;
   copyUpdate(srcRoot, ROOT);
+
+  // Sync Stormworks addon after update
+  try {
+    const dest = path.join(process.env.APPDATA || "", "Stormworks", "data", "missions", "StormPower");
+    if (dest && process.env.APPDATA) {
+      fs.mkdirSync(dest, { recursive: true });
+      const addon = path.join(ROOT, "addon");
+      for (const name of ["playlist.xml", "script.lua"]) {
+        const src = path.join(addon, name);
+        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dest, name));
+      }
+    }
+  } catch (_) {}
 
   try {
     fs.unlinkSync(tmpZip);
@@ -192,8 +257,13 @@ async function checkForUpdates({ silent = true, apply = false } = {}) {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   } catch (_) {}
 
+  // Prefer freshly installed changelog for the finished screen
+  const installedNotes = notesFromChangelog(current) || notes;
   info.applied = true;
+  info.notes = installedNotes;
+  info.changelog = installedNotes;
   info.message = `Updated to ${latest}. Restart StormPower.`;
+  progress(info.message);
   return info;
 }
 
@@ -218,7 +288,7 @@ if (require.main === module) {
     .then((info) => {
       console.log(JSON.stringify(info, null, 2));
       if (info.updateAvailable && !info.applied) {
-        console.log("Run: npm run update -- --apply   or   update.bat");
+        console.log("Run: update.bat   (opens the changelog update screen)");
       }
     })
     .catch((err) => {
@@ -227,4 +297,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { checkForUpdates, getConfig, localVersion };
+module.exports = { checkForUpdates, getConfig, localVersion, notesFromChangelog };

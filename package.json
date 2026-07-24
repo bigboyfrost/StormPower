@@ -1,14 +1,14 @@
 {
     "name": "stormpower",
     "productName": "StormPower",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "description": "StormPower â€” external spawn overlay for Stormworks. By Aimless Developement.",
     "author": "Aimless Developement",
     "license": "MIT",
     "main": "companion/main.js",
     "scripts": {
         "start": "electron .",
-        "update": "node companion/updater.js"
+        "update": "electron . --update-ui"
     },
     "repository": {
         "type": "git",

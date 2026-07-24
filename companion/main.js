@@ -12,6 +12,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const http = require("http");
+const { spawn } = require("child_process");
 const { checkForUpdates } = require("./updater");
 const { createMenuEngine } = require("./menuEngine");
 
@@ -20,14 +21,19 @@ const WIN_W = 622;
 const WIN_H = 800;
 const TOGGLE_W = 64;
 const TOGGLE_H = 64;
+const UPDATE_W = 720;
+const UPDATE_H = 640;
+const UPDATE_UI_ONLY = process.argv.includes("--update-ui");
 
 let mainWindow = null;
 let toggleWindow = null;
+let updateWindow = null;
 let tray = null;
 let keyListener = null;
 const commandQueue = [];
 let lastStatus = { connected: false, lastPoll: 0 };
 let detached = false;
+let cachedUpdateInfo = null;
 
 let menu = null;
 
@@ -49,6 +55,77 @@ function sendToggle(channel, payload) {
   if (toggleWindow && !toggleWindow.isDestroyed()) {
     toggleWindow.webContents.send(channel, payload);
   }
+}
+
+function sendUpdate(channel, payload) {
+  if (updateWindow && !updateWindow.isDestroyed()) {
+    updateWindow.webContents.send(channel, payload);
+  }
+}
+
+function createUpdateWindow(opts = {}) {
+  if (updateWindow && !updateWindow.isDestroyed()) {
+    updateWindow.focus();
+    return updateWindow;
+  }
+
+  const display = screen.getPrimaryDisplay().workArea;
+  const x = Math.round(display.x + (display.width - UPDATE_W) / 2);
+  const y = Math.round(display.y + (display.height - UPDATE_H) / 2);
+
+  updateWindow = new BrowserWindow({
+    width: UPDATE_W,
+    height: UPDATE_H,
+    x,
+    y,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    minimizable: true,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    focusable: true,
+    show: false,
+    hasShadow: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload-update.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+
+  updateWindow.setAlwaysOnTop(true, "screen-saver");
+  updateWindow.loadFile(path.join(__dirname, "renderer", "update.html"));
+  updateWindow.once("ready-to-show", () => {
+    updateWindow.show();
+    updateWindow.focus();
+  });
+  updateWindow.on("closed", () => {
+    updateWindow = null;
+    if (UPDATE_UI_ONLY) app.quit();
+  });
+  return updateWindow;
+}
+
+function openUpdateScreen(info) {
+  if (info) cachedUpdateInfo = info;
+  createUpdateWindow();
+}
+
+function relaunchStormPower() {
+  const root = path.resolve(__dirname, "..");
+  const electronPath = process.execPath;
+  const child = spawn(electronPath, [root], {
+    cwd: root,
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+  app.quit();
 }
 
 function placeWindows(side) {
@@ -361,6 +438,13 @@ function startLowLevelKeys() {
 }
 
 app.whenReady().then(async () => {
+  // Dedicated updater UI (update.bat / npm run update)
+  if (UPDATE_UI_ONLY) {
+    createUpdateWindow();
+    console.log("[StormPower] update UI mode");
+    return;
+  }
+
   menu = createMenuEngine({
     enqueue,
     onChange: onMenuChange,
@@ -375,7 +459,6 @@ app.whenReady().then(async () => {
 
   placeWindows(menu.settings.side);
   showToggleAlways();
-  // Keep the toggle pinned above other windows
   setInterval(() => {
     if (toggleWindow && !toggleWindow.isDestroyed()) {
       toggleWindow.setAlwaysOnTop(true, "screen-saver");
@@ -384,16 +467,15 @@ app.whenReady().then(async () => {
     }
   }, 2000);
 
-  // Start with menu open so first-run is obvious; SP button always stays
   menu.setOpen(true);
 
   try {
     const info = await checkForUpdates({ silent: true });
+    cachedUpdateInfo = info;
     if (info?.updateAvailable) sendMain("update-available", info);
   } catch (_) {}
 
   console.log("[StormPower] ready — Aimless Developement");
-  console.log("[StormPower] Fullscreen: use in-game popup mirror (addon draws menu).");
   console.log("[StormPower] Windowed: floating UI + edge toggle button.");
 });
 
@@ -431,8 +513,41 @@ ipcMain.on("activate-index", (_e, idx) => menu && menu.selectIndex(Number(idx)))
 ipcMain.on("back", () => menu && menu.handleNav("back"));
 ipcMain.on("set-detached", (_e, on) => setDetached(!!on));
 ipcMain.on("queue-command", (_e, line) => enqueue(line));
-ipcMain.handle("check-updates", async () => checkForUpdates({ silent: false }));
-ipcMain.handle("apply-update", async () => checkForUpdates({ silent: false, apply: true }));
+ipcMain.handle("check-updates", async () => {
+  cachedUpdateInfo = await checkForUpdates({ silent: false });
+  return cachedUpdateInfo;
+});
+ipcMain.handle("apply-update", async () => {
+  // Prefer the changelog screen over silent apply
+  openUpdateScreen(cachedUpdateInfo);
+  return { openedUi: true, ...(cachedUpdateInfo || {}) };
+});
+ipcMain.handle("open-update-ui", async () => {
+  const info = cachedUpdateInfo || (await checkForUpdates({ silent: true }));
+  cachedUpdateInfo = info;
+  openUpdateScreen(info);
+  return info;
+});
+ipcMain.handle("update-ui-info", async () => {
+  if (cachedUpdateInfo) return cachedUpdateInfo;
+  cachedUpdateInfo = await checkForUpdates({ silent: false });
+  return cachedUpdateInfo;
+});
+ipcMain.handle("update-ui-apply", async () => {
+  const info = await checkForUpdates({
+    silent: false,
+    apply: true,
+    onProgress: (p) => sendUpdate("update-progress", p),
+  });
+  cachedUpdateInfo = info;
+  if (info?.applied) sendMain("update-available", { ...info, updateAvailable: false });
+  return info;
+});
+ipcMain.on("update-ui-close", () => {
+  if (updateWindow && !updateWindow.isDestroyed()) updateWindow.close();
+  else if (UPDATE_UI_ONLY) app.quit();
+});
+ipcMain.on("update-ui-restart", () => relaunchStormPower());
 
 function readVersion() {
   try {

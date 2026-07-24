@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>StormPower Update</title>
+  <style>
+    :root {
+      --bg0: #071526;
+      --bg1: #0d2d55;
+      --bg2: #1a5fa8;
+      --text: #e8f4ff;
+      --muted: #8eb8e0;
+      --blue: #4db4ff;
+      --blue-bright: #7cc8ff;
+      --black: #0a0a0a;
+      --green: #3dde7a;
+      --orange: #ffb020;
+      --red: #ff5a4e;
+      --font: "Segoe UI Variable", "Segoe UI", "Avenir Next", "Trebuchet MS", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: var(--font);
+      color: var(--text);
+      background: transparent;
+      overflow: hidden;
+      user-select: none;
+    }
+    .frame {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background:
+        radial-gradient(900px 420px at 0% 0%, rgba(100, 190, 255, 0.35), transparent 55%),
+        radial-gradient(700px 380px at 100% 0%, rgba(40, 120, 220, 0.35), transparent 50%),
+        linear-gradient(165deg, var(--bg2) 0%, var(--bg1) 45%, var(--bg0) 100%);
+      border: 1px solid rgba(140, 200, 255, 0.35);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 22px 60px rgba(0, 15, 40, 0.55);
+    }
+    .top {
+      -webkit-app-region: drag;
+      padding: 22px 24px 14px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      border-bottom: 1px solid rgba(140, 200, 255, 0.18);
+    }
+    .eyebrow {
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    h1 {
+      margin: 4px 0 0;
+      font-size: 28px;
+      letter-spacing: -0.03em;
+    }
+    .sub {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .version-pill {
+      -webkit-app-region: no-drag;
+      align-self: center;
+      padding: 10px 14px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(140, 200, 255, 0.25);
+      text-align: right;
+      min-width: 150px;
+    }
+    .version-pill .from {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .version-pill .to {
+      margin-top: 2px;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--blue-bright);
+    }
+    .body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 20px 12px;
+      gap: 12px;
+      -webkit-app-region: no-drag;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(140, 200, 255, 0.2);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--orange);
+      flex-shrink: 0;
+    }
+    .status.ready .dot { background: var(--blue); }
+    .status.working .dot {
+      background: var(--blue-bright);
+      animation: pulse 1s ease-in-out infinite;
+    }
+    .status.done .dot { background: var(--green); }
+    .status.error .dot { background: var(--red); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.85); }
+    }
+    .changelog-wrap {
+      flex: 1;
+      min-height: 0;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.38);
+      border: 1px solid rgba(140, 200, 255, 0.2);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .changelog-title {
+      padding: 10px 14px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid rgba(140, 200, 255, 0.15);
+    }
+    .changelog {
+      flex: 1;
+      overflow: auto;
+      padding: 14px 16px 18px;
+      font-size: 14px;
+      line-height: 1.45;
+      user-select: text;
+    }
+    .changelog h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      color: var(--blue-bright);
+    }
+    .changelog h3 {
+      margin: 16px 0 8px;
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .changelog ul {
+      margin: 0;
+      padding-left: 1.15em;
+    }
+    .changelog li {
+      margin: 6px 0;
+      color: var(--text);
+    }
+    .changelog p {
+      margin: 0 0 10px;
+      color: var(--muted);
+    }
+    .changelog::-webkit-scrollbar { width: 8px; }
+    .changelog::-webkit-scrollbar-thumb {
+      background: rgba(100, 170, 230, 0.35);
+      border-radius: 999px;
+    }
+    .progress {
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(100, 170, 230, 0.18);
+      overflow: hidden;
+      display: none;
+    }
+    .progress.show { display: block; }
+    .progress > span {
+      display: block;
+      height: 100%;
+      width: 30%;
+      background: linear-gradient(90deg, var(--blue), var(--blue-bright));
+      animation: slide 1.1s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(400%); }
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      padding: 8px 20px 18px;
+      -webkit-app-region: no-drag;
+    }
+    button {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      padding: 10px 18px;
+      font-weight: 800;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+    }
+    .btn-ghost:hover { color: #fff; background: rgba(0,0,0,0.25); }
+    .btn-primary {
+      background: var(--black);
+      color: var(--blue-bright);
+      border-color: rgba(77, 180, 255, 0.45);
+      min-width: 140px;
+    }
+    .btn-primary:hover {
+      background: #000;
+      color: #fff;
+    }
+    .btn-primary:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .credit {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      padding-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <header class="top">
+      <div>
+        <p class="eyebrow">Aimless Developement</p>
+        <h1>StormPower Update</h1>
+        <p class="sub" id="subtitle">Checking for the latest release…</p>
+      </div>
+      <div class="version-pill">
+        <div class="from" id="fromVer">v—</div>
+        <div class="to" id="toVer">…</div>
+      </div>
+    </header>
+
+    <div class="body">
+      <div id="status" class="status working">
+        <span class="dot"></span>
+        <span id="statusText">Contacting GitHub…</span>
+      </div>
+      <div class="progress" id="progress"><span></span></div>
+      <div class="changelog-wrap">
+        <div class="changelog-title">Changelog</div>
+        <div class="changelog" id="changelog">
+          <p>Loading release notes…</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn-ghost" id="laterBtn">Later</button>
+      <button type="button" class="btn-primary" id="actionBtn" disabled>Update Now</button>
+    </div>
+    <p class="credit">StormPower · Aimless Developement</p>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const statusText = document.getElementById("statusText");
+    const subtitle = document.getElementById("subtitle");
+    const fromVer = document.getElementById("fromVer");
+    const toVer = document.getElementById("toVer");
+    const changelog = document.getElementById("changelog");
+    const progress = document.getElementById("progress");
+    const laterBtn = document.getElementById("laterBtn");
+    const actionBtn = document.getElementById("actionBtn");
+
+    let info = null;
+    let phase = "checking"; // checking | ready | uptodate | working | done | error
+
+    function setStatus(kind, text) {
+      statusEl.className = "status " + kind;
+      statusText.textContent = text;
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function mdToHtml(md) {
+      const lines = String(md || "").replace(/\r\n/g, "\n").split("\n");
+      let html = "";
+      let inList = false;
+      const flushList = () => {
+        if (inList) { html += "</ul>"; inList = false; }
+      };
+      for (const raw of lines) {
+        const line = raw.trimEnd();
+        if (!line.trim()) { flushList(); continue; }
+        if (/^##\s+/.test(line)) {
+          flushList();
+          html += `<h2>${escapeHtml(line.replace(/^##\s+/, ""))}</h2>`;
+          continue;
+        }
+        if (/^###\s+/.test(line)) {
+          flushList();
+          html += `<h3>${escapeHtml(line.replace(/^###\s+/, ""))}</h3>`;
+          continue;
+        }
+        if (/^[-*]\s+/.test(line)) {
+          if (!inList) { html += "<ul>"; inList = true; }
+          let item = escapeHtml(line.replace(/^[-*]\s+/, ""));
+          item = item.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+          html += `<li>${item}</li>`;
+          continue;
+        }
+        flushList();
+        let p = escapeHtml(line);
+        p = p.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+        html += `<p>${p}</p>`;
+      }
+      flushList();
+      return html || "<p>No changelog notes for this release.</p>";
+    }
+
+    function renderInfo(data) {
+      info = data || {};
+      fromVer.textContent = `v${info.current || "—"}`;
+      toVer.textContent = info.updateAvailable
+        ? `→ v${info.latest}`
+        : `v${info.latest || info.current || "—"}`;
+
+      const notes = info.notes || info.changelog || "";
+      changelog.innerHTML = mdToHtml(notes);
+
+      if (info.updateAvailable) {
+        phase = "ready";
+        subtitle.textContent = "A newer build is ready to install.";
+        setStatus("ready", `Update available: v${info.current} → v${info.latest}`);
+        actionBtn.disabled = false;
+        actionBtn.textContent = "Update Now";
+        laterBtn.textContent = "Later";
+      } else {
+        phase = "uptodate";
+        subtitle.textContent = "You're on the latest StormPower.";
+        setStatus("done", info.message || `Up to date (v${info.current})`);
+        actionBtn.disabled = false;
+        actionBtn.textContent = "Close";
+        laterBtn.textContent = "Close";
+      }
+    }
+
+    async function boot() {
+      try {
+        const data = await window.stormpowerUpdate.getUpdateInfo();
+        renderInfo(data);
+      } catch (err) {
+        phase = "error";
+        setStatus("error", err?.message || "Failed to check for updates");
+        changelog.innerHTML = `<p>${escapeHtml(err?.message || "Unknown error")}</p>`;
+        actionBtn.disabled = false;
+        actionBtn.textContent = "Retry";
+      }
+    }
+
+    laterBtn.addEventListener("click", () => window.stormpowerUpdate.close());
+
+    actionBtn.addEventListener("click", async () => {
+      if (phase === "uptodate" || phase === "done") {
+        window.stormpowerUpdate.close();
+        return;
+      }
+      if (phase === "error") {
+        phase = "checking";
+        actionBtn.disabled = true;
+        setStatus("working", "Retrying…");
+        await boot();
+        return;
+      }
+      if (phase !== "ready") return;
+
+      phase = "working";
+      actionBtn.disabled = true;
+      laterBtn.disabled = true;
+      progress.classList.add("show");
+      subtitle.textContent = "Downloading and installing…";
+      setStatus("working", "Installing update — keep this window open");
+
+      try {
+        const res = await window.stormpowerUpdate.applyUpdate();
+        progress.classList.remove("show");
+        if (res?.applied) {
+          phase = "done";
+          setStatus("done", res.message || `Updated to v${res.latest}. Restart StormPower.`);
+          subtitle.textContent = "Update installed successfully.";
+          fromVer.textContent = `v${res.current || info?.current || "—"}`;
+          toVer.textContent = `→ v${res.latest}`;
+          if (res.notes) changelog.innerHTML = mdToHtml(res.notes);
+          actionBtn.disabled = false;
+          actionBtn.textContent = "Restart";
+          laterBtn.disabled = false;
+          laterBtn.textContent = "Close";
+          actionBtn.onclick = () => window.stormpowerUpdate.restart();
+        } else {
+          phase = "error";
+          setStatus("error", res?.message || "Update failed");
+          actionBtn.disabled = false;
+          laterBtn.disabled = false;
+          actionBtn.textContent = "Retry";
+        }
+      } catch (err) {
+        progress.classList.remove("show");
+        phase = "error";
+        setStatus("error", err?.message || "Update failed");
+        actionBtn.disabled = false;
+        laterBtn.disabled = false;
+        actionBtn.textContent = "Retry";
+      }
+    });
+
+    if (window.stormpowerUpdate) {
+      window.stormpowerUpdate.onProgress((p) => {
+        if (p?.message) setStatus("working", p.message);
+      });
+      boot();
+    }
+  </script>
+</body>
+</html>
