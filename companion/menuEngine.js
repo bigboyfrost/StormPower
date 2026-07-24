@@ -42,6 +42,7 @@ const MENU = {
       { label: "Explosions", sub: "Blasts around you (Weapons DLC)", goto: "explosions" },
       { label: "Weather & Waves", sub: "Ultra wind, massive seas", goto: "weather" },
       { label: "Disasters", sub: "Tsunami, tornado, meteor…", goto: "disasters" },
+      { label: "Other", sub: "Chaos Mode, vehicle boost…", goto: "other" },
       { label: "Player", sub: "Heal, money, loadout", goto: "player" },
       { label: "Game Rules", sub: "Fuel, damage, no-clip", goto: "rules" },
       { label: "Overlay Side", sub: "Left or right of the screen", goto: "side" },
@@ -206,10 +207,11 @@ const MENU = {
       { label: "Clear / Calm Seas", sub: "No wind, flat water", cmd: "sea", mode: 0, wind: 0 },
       { label: "Choppy Seas", sub: "Wind 0.72", cmd: "sea", mode: 1, wind: 0.72 },
       { label: "Max Weather Waves", sub: "Wind 1.0 — tallest stock waves", cmd: "sea", mode: 1, wind: 1 },
-      { label: "Ultra Wind x5", sub: "Pushes weather wind hard (visual/force)", cmd: "ultra_wind", wind: 5 },
-      { label: "Ultra Wind x10", sub: "Maximum ultra wind push", cmd: "ultra_wind", wind: 10 },
+      { label: "Ultra Wind x5", sub: "Pushes weather wind hard", cmd: "ultra_wind", wind: 5 },
+      { label: "Ultra Wind x10", sub: "Hard wind push", cmd: "ultra_wind", wind: 10 },
+      { label: "50x Wind", sub: "Absurd wind force (x50)", cmd: "ultra_wind", wind: 50 },
       { label: "MASSIVE WAVES", sub: "Cancel+respawn tsunami loop @ spawn dist", cmd: "sea", mode: 2, wind: 1 },
-      { label: "ULTRA MASSIVE WAVES", sub: "Faster despawn/respawn + ultra wind", cmd: "sea", mode: 3, wind: 10 },
+      { label: "ULTRA MASSIVE WAVES", sub: "Stacked pulse + whirlpool swap + wind 50", cmd: "sea", mode: 4, wind: 50 },
       { label: "Stop Massive Waves", sub: "Cancel wave events, calm wind", cmd: "sea", mode: 0, wind: 0 },
       { label: "Spawn One Mega Wave", sub: "Uses spawn distance in front of you", cmd: "mega_wave" },
       { label: "Disable Disaster Sirens", sub: "Force-mute warning towers", cmd: "sirens", mode: "off" },
@@ -217,6 +219,35 @@ const MENU = {
       { label: "Despawn Siren Towers", sub: "Remove towers entirely (nuclear option)", cmd: "sirens", mode: "kill" },
       { label: "Heavy Fog", cmd: "weather", fog: 1, rain: 0, wind: 0.2 },
       { label: "Heavy Rain + Wind", cmd: "weather", fog: 0.2, rain: 1, wind: 0.85 },
+    ],
+  },
+  other: {
+    title: "Other",
+    items: [
+      {
+        label: "CHAOS MODE",
+        sub: "Everything tries to kill you. Hold on.",
+        cmd: "chaos",
+        mode: "on",
+      },
+      {
+        label: "Stop Chaos",
+        sub: "End the apocalypse early",
+        cmd: "chaos",
+        mode: "off",
+      },
+      {
+        label: "Vehicle Boost ON",
+        sub: "Shoves your current vehicle forward hard",
+        cmd: "boost",
+        mode: "on",
+      },
+      {
+        label: "Vehicle Boost OFF",
+        sub: "Stop the speed shove",
+        cmd: "boost",
+        mode: "off",
+      },
     ],
   },
   disasters: {
@@ -302,6 +333,10 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
         return `mega_wave|${peer}|${dist}`;
       case "sirens":
         return `sirens|${peer}|${item.mode}`;
+      case "chaos":
+        return `chaos|${peer}|${item.mode}`;
+      case "boost":
+        return `boost|${peer}|${item.mode}`;
       case "explode":
         return `explode|${peer}|${item.mag}|${dist}`;
       case "explode_ring":

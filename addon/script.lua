@@ -14,19 +14,36 @@ local weather_fog = 0
 local weather_rain = 0
 local weather_wind = 0
 local ultra_wind = 0 -- visual/force push; waves still clamp to 0-1 internally for gerstner height
--- sea_mode: 0 off, 1 weather waves, 2 massive loop, 3 ultra massive (faster cancel/respawn)
+-- sea_mode: 0 off, 1 weather waves, 2 massive loop, 3 legacy ultra, 4 impossible stacked waves
 local sea_mode = 0
 local tsunami_timer = 0
 local tsunami_phase = 0 -- 0 wait, 1 just cancelled (spawn next)
 local wave_dist = 150
 local wave_peer = 0
+local wave_pulse = 0 -- rotates spawn distance / event type for bigger-than-stock feel
 local TSUNAMI_INTERVAL_NORMAL = 90
 local TSUNAMI_INTERVAL_ULTRA = 40
+local TSUNAMI_INTERVAL_IMPOSSIBLE = 18
 local sirens_muted = true
 local tracked_sirens = {}
 local siren_refresh = 0
 local siren_scan = 0
 local siren_scan_id = 1
+
+-- Chaos Mode: timed assault that tries to kill the player (rate-limited)
+local chaos = {
+	active = false,
+	peer = 0,
+	t = 0,
+	step = 0,
+}
+
+-- Vehicle boost: continuously shove seated vehicle forward
+local boost = {
+	active = false,
+	peer = 0,
+	strength = 12, -- meters per tick along vehicle forward
+}
 
 local session = {
 	count = 5,
@@ -135,17 +152,16 @@ local function slotEmpty(char_id, slot)
 	return eq == nil or eq == 0
 end
 
--- Place item into the first empty matching slot so gear spreads across inventory
+-- Place item into the first empty matching slot so gear spreads across inventory.
+-- is_active MUST be false — true makes guns/tools auto-fire / auto-activate on spawn.
 local function giveSpread(char_id, equip_id, preferred_slot, int_v, float_v)
 	local large = LARGE_EQUIP[equip_id] == true
 	if large then
 		if slotEmpty(char_id, 1) or preferred_slot == 1 then
-			return server.setCharacterItem(char_id, 1, equip_id, true, int_v, float_v)
+			return server.setCharacterItem(char_id, 1, equip_id, false, int_v, float_v)
 		end
-		-- large slot occupied — still force into 1
-		return server.setCharacterItem(char_id, 1, equip_id, true, int_v, float_v)
+		return server.setCharacterItem(char_id, 1, equip_id, false, int_v, float_v)
 	end
-	-- Prefer empty small slots 2-9, starting at preferred
 	local order = {}
 	local start = preferred_slot or 2
 	if start < 2 then start = 2 end
@@ -154,11 +170,10 @@ local function giveSpread(char_id, equip_id, preferred_slot, int_v, float_v)
 	for i = 1, #order do
 		local s = order[i]
 		if slotEmpty(char_id, s) then
-			return server.setCharacterItem(char_id, s, equip_id, true, int_v, float_v)
+			return server.setCharacterItem(char_id, s, equip_id, false, int_v, float_v)
 		end
 	end
-	-- All full — overwrite preferred
-	return server.setCharacterItem(char_id, start, equip_id, true, int_v, float_v)
+	return server.setCharacterItem(char_id, start, equip_id, false, int_v, float_v)
 end
 
 local function cleanup(peer_id)
@@ -277,6 +292,39 @@ local function spawnMegaWaveNear(peer_id, dist)
 	return true
 end
 
+-- Mode 4: try to feel "bigger than possible" by stacking tricks the engine allows
+-- (only 1 gerstner at a time — so we pulse hard, swap tsunami/whirlpool, vary range)
+local function spawnImpossibleWave(peer_id, dist)
+	dist = math.max(60, dist or wave_dist or 120)
+	wave_dist = dist
+	wave_peer = peer_id
+	wave_pulse = (wave_pulse or 0) + 1
+	local kind = wave_pulse % 4
+	-- Vary distance so successive crests hit from different ranges
+	local d = dist
+	if kind == 1 then d = dist * 0.55
+	elseif kind == 2 then d = dist * 1.35
+	elseif kind == 3 then d = dist * 0.85
+	end
+	d = math.max(50, math.min(5000, d))
+	local lateral = ((wave_pulse % 5) - 2) * 40
+	local mat = waveMatrix(peer_id, d, lateral)
+	if not mat then return false end
+
+	if kind == 2 then
+		server.spawnWhirlpool(mat, 1.0)
+	else
+		server.spawnTsunami(mat, 1.0)
+	end
+	-- Extra meteor-tsunami occasionally for water chaos
+	if wave_pulse % 7 == 0 then
+		local mat2 = waveMatrix(peer_id, d + 80, -lateral)
+		if mat2 then server.spawnMeteor(mat2, 1.0, true) end
+	end
+	if sirens_muted then silenceSirens() end
+	return true
+end
+
 local function pulseWaveCycle(peer_id)
 	-- Despawn then respawn to simulate continuous wave crests (engine: 1 gerstner max)
 	if tsunami_phase == 0 then
@@ -285,7 +333,136 @@ local function pulseWaveCycle(peer_id)
 		return
 	end
 	tsunami_phase = 0
-	spawnMegaWaveNear(peer_id, wave_dist)
+	if sea_mode >= 4 then
+		spawnImpossibleWave(peer_id, wave_dist)
+	else
+		spawnMegaWaveNear(peer_id, wave_dist)
+	end
+end
+
+local function getSeatedVehicle(peer_id)
+	local char_id = getCharacter(peer_id)
+	if not char_id then return nil end
+	local vid, ok = server.getCharacterVehicle(char_id)
+	if ok and vid and vid ~= 0 then return vid end
+	return nil
+end
+
+local function applyVehicleBoost(peer_id, strength)
+	local vid = getSeatedVehicle(peer_id)
+	if not vid then return false end
+	local mat, ok = server.getVehiclePos(vid)
+	if not ok or not mat then return false end
+	-- Shove along vehicle local +Z (forward)
+	local moved = matrix.multiply(mat, matrix.translation(0, 0, strength or boost.strength))
+	server.moveVehicle(vid, moved)
+	return true
+end
+
+local function stopChaos()
+	chaos.active = false
+	chaos.t = 0
+	chaos.step = 0
+end
+
+local function startChaos(peer_id)
+	chaos.active = true
+	chaos.peer = peer_id
+	chaos.t = 0
+	chaos.step = 0
+	-- Make sure the world can hurt them
+	server.setGameSetting("player_damage", true)
+	server.setGameSetting("vehicle_damage", true)
+	server.setGameSetting("npc_damage", true)
+	server.setGameSetting("no_clip", false)
+	-- Max seas + absurd wind
+	sea_mode = 4
+	wave_peer = peer_id
+	wave_dist = math.max(80, session.dist or 120)
+	tsunami_timer = 0
+	tsunami_phase = 1
+	setWeatherState(0.4, 1, 1, 50)
+	server.setAudioMood(-1, 3)
+	sirens_muted = false -- let the chaos be loud
+	announce(peer_id, "CHAOS MODE — everything is trying to kill you.")
+	notify(peer_id, "CHAOS MODE ON")
+end
+
+local function chaosTick(gt)
+	if not chaos.active then return end
+	local peer = resolvePeer(chaos.peer)
+	chaos.t = chaos.t + gt
+	local char_id = getCharacter(peer)
+	local pos, pok = server.getPlayerPos(peer)
+
+	-- Every ~45 ticks: spawn a wave of threats (capped counts — no PC meltdown)
+	if chaos.t % 45 < gt then
+		chaos.step = chaos.step + 1
+		local s = chaos.step
+
+		-- Animals / monsters nearby
+		if pok then
+			for i = 1, 3 do
+				local a = (i / 3) * math.pi * 2 + chaos.t * 0.01
+				local mat = matrix.translation(pos[13] + math.cos(a) * 18, pos[14] - 2, pos[15] + math.sin(a) * 18)
+				local oid, ok = server.spawnAnimal(mat, (s % 2 == 0) and 0 or 4, 1.4)
+				if ok then track("object", oid) end
+			end
+			if s % 2 == 0 then
+				local mat = matrix.translation(pos[13] + 12, pos[14], pos[15] + 8)
+				local oid, ok = server.spawnCreature(mat, 1, 1.5) -- grizzly
+				if ok then track("object", oid) end
+			end
+		end
+
+		-- Explosions / fire around (not every tick)
+		if pok and s % 1 == 0 then
+			for i = 0, 3 do
+				local a = (i / 4) * math.pi * 2 + s
+				local mat = matrix.translation(pos[13] + math.cos(a) * 10, pos[14], pos[15] + math.sin(a) * 10)
+				server.spawnExplosion(mat, 0.75)
+			end
+			local fmat = matrix.translation(pos[13] + 6, pos[14], pos[15] - 4)
+			local oid, ok = server.spawnFire(fmat, 6, -1, true, true, 0, 4)
+			if ok then track("object", oid) end
+		end
+
+		-- Disasters
+		if pok then
+			local dmat = matrix.translation(pos[13] + 90, 0, pos[15] + 40)
+			if s % 3 == 1 then server.spawnTornado(dmat)
+			elseif s % 3 == 2 then server.spawnMeteorShower(dmat, 1, true)
+			else server.spawnWhirlpool(dmat, 1) end
+			pulseWaveCycle(peer)
+		end
+
+		-- Bleed HP each step
+		if char_id then
+			local hp = math.max(0, 100 - s * 12)
+			server.setCharacterData(char_id, hp, false, false)
+			if hp <= 5 or s >= 10 then
+				server.killCharacter(char_id)
+				announce(peer, "CHAOS MODE got you.")
+				notify(peer, "You died.")
+				stopChaos()
+				-- Leave seas raging a bit
+				return
+			end
+		end
+	end
+
+	-- Soft continuous pressure: tiny nearby blasts less often
+	if pok and chaos.t % 20 < gt then
+		local mat = matrix.translation(pos[13] + (math.random() - 0.5) * 14, pos[14], pos[15] + (math.random() - 0.5) * 14)
+		server.spawnExplosion(mat, 0.35)
+	end
+
+	-- Hard timeout safety (~25s) then force kill
+	if chaos.t > 60 * 25 then
+		if char_id then server.killCharacter(char_id) end
+		stopChaos()
+		notify(peer, "Chaos timed out — finishing you")
+	end
 end
 
 local function runCommand(line)
@@ -433,12 +610,11 @@ local function runCommand(line)
 	elseif cmd == "ultra_wind" then
 		local wind = num(p[3], 5)
 		ultra_wind = math.max(0, wind)
-		-- Keep wave height maxed while ultra wind pushes
 		weather_wind = 1
 		if sea_mode < 1 then sea_mode = 1 end
 		applyWeather()
-		notify(peer_id, "Ultra wind x" .. tostring(wind))
-		announce(peer_id, "Ultra wind active. Wave height still caps at 1.0 — use ULTRA MASSIVE WAVES for tsunami pulses.")
+		notify(peer_id, "Wind x" .. tostring(wind))
+		announce(peer_id, "Wind force set to x" .. tostring(wind) .. ". Wave height still engine-capped — use ULTRA MASSIVE WAVES for stacked pulses.")
 
 	elseif cmd == "sea" then
 		local mode = math.floor(num(p[3], 0))
@@ -449,6 +625,7 @@ local function runCommand(line)
 		tsunami_phase = 0
 		wave_dist = dist
 		wave_peer = peer_id
+		wave_pulse = 0
 		session.dist = dist
 		if mode <= 0 then
 			server.cancelGerstner()
@@ -458,16 +635,22 @@ local function runCommand(line)
 		else
 			local ultra = 0
 			if mode >= 3 then ultra = math.max(wind, 10) end
+			if mode >= 4 then ultra = math.max(wind, 50) end
 			if wind > 1 then ultra = math.max(ultra, wind); wind = 1 end
 			setWeatherState(weather_fog, weather_rain, wind, ultra)
 			if mode >= 2 then
 				sirens_muted = true
 				silenceSirens()
 				server.cancelGerstner()
-				tsunami_phase = 1 -- spawn immediately next pulse
+				tsunami_phase = 1
 				pulseWaveCycle(peer_id)
-				notify(peer_id, (mode >= 3 and "ULTRA " or "") .. "MASSIVE WAVES @ " .. math.floor(dist) .. "m")
-				announce(peer_id, "Tsunami cancel/respawn loop ahead of you at " .. math.floor(dist) .. "m. Sirens muted.")
+				if mode >= 4 then
+					notify(peer_id, "ULTRA MASSIVE @ " .. math.floor(dist) .. "m (stacked)")
+					announce(peer_id, "Impossible wave mode: rapid cancel/respawn, tsunami/whirlpool swap, wind x50. Engine still allows only 1 gerstner — we stack pulses.")
+				else
+					notify(peer_id, (mode >= 3 and "ULTRA " or "") .. "MASSIVE WAVES @ " .. math.floor(dist) .. "m")
+					announce(peer_id, "Tsunami cancel/respawn loop ahead of you at " .. math.floor(dist) .. "m. Sirens muted.")
+				end
 			else
 				server.cancelGerstner()
 				notify(peer_id, string.format("Sea state ON (wind %.2f)", weather_wind))
@@ -483,6 +666,36 @@ local function runCommand(line)
 			notify(peer_id, "Mega wave @ " .. math.floor(dist) .. "m ahead")
 		else
 			announce(peer_id, "Could not spawn mega wave")
+		end
+
+	elseif cmd == "chaos" then
+		local mode = tostring(p[3] or "on")
+		if mode == "off" or mode == "0" or mode == "stop" then
+			stopChaos()
+			sea_mode = 0
+			server.cancelGerstner()
+			setWeatherState(0, 0, 0, 0)
+			notify(peer_id, "Chaos stopped")
+		else
+			startChaos(peer_id)
+		end
+
+	elseif cmd == "boost" then
+		local mode = tostring(p[3] or "on")
+		if mode == "off" or mode == "0" or mode == "stop" then
+			boost.active = false
+			notify(peer_id, "Vehicle boost OFF")
+		else
+			local vid = getSeatedVehicle(peer_id)
+			if not vid then
+				announce(peer_id, "Sit in a vehicle seat first, then enable boost.")
+				notify(peer_id, "Not in a vehicle")
+			else
+				boost.active = true
+				boost.peer = peer_id
+				notify(peer_id, "Vehicle boost ON")
+				announce(peer_id, "Boosting — hold on. Toggle off from Other when done.")
+			end
 		end
 
 	elseif cmd == "sirens" then
@@ -552,18 +765,18 @@ local function runCommand(line)
 	elseif cmd == "loadout" then
 		local char_id = getCharacter(peer_id)
 		if char_id then
-			-- Clear then spread across slots so nothing stacks on one slot
 			for slot = 1, 9 do server.setCharacterItem(char_id, slot, 0, false, 0, 0) end
-			server.setCharacterItem(char_id, 1, 39, true, 30, 0)
-			server.setCharacterItem(char_id, 2, 40, true, 60, 0)
-			server.setCharacterItem(char_id, 3, 41, true, 5, 0)
-			server.setCharacterItem(char_id, 4, 11, true, 4, 0)
-			server.setCharacterItem(char_id, 5, 31, true, 4, 0)
-			server.setCharacterItem(char_id, 6, 32, true, 0, 0)
-			server.setCharacterItem(char_id, 7, 15, true, 0, 100)
-			server.setCharacterItem(char_id, 8, 6, true, 0, 100)
-			server.setCharacterItem(char_id, 9, 12, true, 4, 0)
-			server.setCharacterItem(char_id, 10, 78, true, 0, 0)
+			-- false = don't auto-activate / auto-fire weapons
+			server.setCharacterItem(char_id, 1, 39, false, 30, 0)
+			server.setCharacterItem(char_id, 2, 40, false, 60, 0)
+			server.setCharacterItem(char_id, 3, 41, false, 5, 0)
+			server.setCharacterItem(char_id, 4, 11, false, 4, 0)
+			server.setCharacterItem(char_id, 5, 31, false, 4, 0)
+			server.setCharacterItem(char_id, 6, 32, false, 0, 0)
+			server.setCharacterItem(char_id, 7, 15, false, 0, 100)
+			server.setCharacterItem(char_id, 8, 6, false, 0, 100)
+			server.setCharacterItem(char_id, 9, 12, false, 4, 0)
+			server.setCharacterItem(char_id, 10, 78, false, 0, 0)
 			notify(peer_id, "Loadout ready (spread)")
 		end
 
@@ -595,7 +808,9 @@ local function help(peer_id)
 	announce(peer_id, "?tsunami [dist]   Wave ahead of you")
 	announce(peer_id, "?sirens off|on|kill")
 	announce(peer_id, "?boom [0-1] [dist]   Explosion")
-	announce(peer_id, "?wind <0-10>   Ultra wind / waves")
+	announce(peer_id, "?wind <0-50>   Ultra wind / waves")
+	announce(peer_id, "?chaos / ?chaos off")
+	announce(peer_id, "?boost / ?boost off   Vehicle speed shove")
 end
 
 local GIVE = {
@@ -626,9 +841,12 @@ function onCreate(is_world_create)
 	ultra_wind = 0
 	tsunami_timer = 0
 	tsunami_phase = 0
+	wave_pulse = 0
 	tick_counter = 0
 	sirens_muted = true
 	tracked_sirens = {}
+	stopChaos()
+	boost.active = false
 	silenceSirens()
 	announce(-1, "StormPower ready. Sirens muted. Type ?sp for commands.")
 end
@@ -660,10 +878,14 @@ function onTick(game_ticks)
 	end
 
 	if sea_mode >= 2 then
-		local interval = (sea_mode >= 3) and TSUNAMI_INTERVAL_ULTRA or TSUNAMI_INTERVAL_NORMAL
-		-- Half-interval steps: cancel, then spawn (despawn/respawn pulse)
+		local interval = TSUNAMI_INTERVAL_NORMAL
+		if sea_mode >= 4 then
+			interval = TSUNAMI_INTERVAL_IMPOSSIBLE
+		elseif sea_mode >= 3 then
+			interval = TSUNAMI_INTERVAL_ULTRA
+		end
 		local step = math.floor(interval / 2)
-		if step < 12 then step = 12 end
+		if step < 8 then step = 8 end
 		tsunami_timer = tsunami_timer + gt
 		if tsunami_timer >= step then
 			tsunami_timer = 0
@@ -682,6 +904,16 @@ function onTick(game_ticks)
 			pulseWaveCycle(peer)
 		end
 	end
+
+	-- Vehicle boost: shove seated vehicle forward every tick
+	if boost.active then
+		local peer = resolvePeer(boost.peer)
+		if not applyVehicleBoost(peer, boost.strength) then
+			-- Left the seat — keep flag but don't spam; user can re-enable
+		end
+	end
+
+	chaosTick(gt)
 end
 
 function onVehicleLoad(vehicle_id)
@@ -804,8 +1036,11 @@ function onCustomCommand(full_message, peer_id, is_admin, is_auth, command, ...)
 			runCommand("sea|" .. peer_id .. "|1|" .. tostring(w) .. "|" .. session.dist)
 		elseif w < 5 then
 			runCommand("sea|" .. peer_id .. "|2|1|" .. session.dist)
-		else
+		elseif w < 40 then
 			runCommand("sea|" .. peer_id .. "|3|" .. tostring(w) .. "|" .. session.dist)
+		else
+			runCommand("ultra_wind|" .. peer_id .. "|" .. tostring(w))
+			runCommand("sea|" .. peer_id .. "|4|" .. tostring(w) .. "|" .. session.dist)
 		end
 	elseif command == "?waves" then
 		local mode = string.lower(tostring(args[1] or "max"))
@@ -814,7 +1049,7 @@ function onCustomCommand(full_message, peer_id, is_admin, is_auth, command, ...)
 		elseif mode == "choppy" then
 			runCommand("sea|" .. peer_id .. "|1|0.72|" .. session.dist)
 		elseif mode == "ultra" then
-			runCommand("sea|" .. peer_id .. "|3|10|" .. session.dist)
+			runCommand("sea|" .. peer_id .. "|4|50|" .. session.dist)
 		elseif mode == "mega" or mode == "massive" then
 			runCommand("sea|" .. peer_id .. "|2|1|" .. session.dist)
 		else
@@ -830,5 +1065,19 @@ function onCustomCommand(full_message, peer_id, is_admin, is_auth, command, ...)
 		local mag = aNum(1, 0.5)
 		local d = aNum(2, 15)
 		runCommand(string.format("explode|%d|%s|%s", peer_id, mag, d))
+	elseif command == "?chaos" then
+		local mode = string.lower(tostring(args[1] or "on"))
+		if mode == "off" or mode == "stop" then
+			runCommand("chaos|" .. peer_id .. "|off")
+		else
+			runCommand("chaos|" .. peer_id .. "|on")
+		end
+	elseif command == "?boost" then
+		local mode = string.lower(tostring(args[1] or "on"))
+		if mode == "off" or mode == "stop" then
+			runCommand("boost|" .. peer_id .. "|off")
+		else
+			runCommand("boost|" .. peer_id .. "|on")
+		end
 	end
 end
