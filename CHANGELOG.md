@@ -1,5 +1,11 @@
 ﻿# StormPower Changelog
 
+## 1.5.9
+- Mega Wave Engine rebuilt as a narrow localized wall: 900m shader coefficient, 2.5 Ultra magnitude
+- Wave refresh slowed to once per minute so the ocean no longer pulses every few seconds
+- Replaced ineffective occupied-seat boost with Overrev Engine Power: 25x torque patch for stock and modular engines
+- Overrev and wave engine patches remain independently toggleable and restore backed-up game definitions
+
 ## 1.5.8
 - Mega Wave Engine softened (stock wavelength, ~45% crest height) — stops ocean bounce / boat levitation
 - Wave pulses no longer cancel/respawn-strobe; lower tsunami magnitudes

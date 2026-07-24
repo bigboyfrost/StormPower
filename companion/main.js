@@ -555,6 +555,9 @@ app.whenReady().then(async () => {
         }
         return res;
       }
+      if (action === "overrev_engine") {
+        return engineMod.setOverrevInstalled(!!on);
+      }
       if (action === "check_updates") {
         const info = await appUpdater.checkForUpdates({ silent: false });
         cachedUpdateInfo = info;
@@ -577,6 +580,8 @@ app.whenReady().then(async () => {
     if (em.installed) {
       engineMod.install();
     }
+    const overrev = engineMod.isOverrevInstalled();
+    menu.setToggle("overrev_engine", !!overrev.installed);
   } catch (_) {}
 
   createHttpBridge();

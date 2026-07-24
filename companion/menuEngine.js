@@ -91,21 +91,21 @@ const MENU = {
       },
       {
         label: "Ultra Massive Waves",
-        sub: "Taller crests — enable Mega Wave Engine too",
+        sub: "Island-scale rogue walls — enable Mega Wave Engine",
         toggle: "ultra_waves",
         cmd: "sea_toggle_ultra",
       },
       {
         label: "Mega Wave Engine",
-        sub: "Mild ocean crest patch (~45%). Restart Stormworks",
+        sub: "Localized 900m wave wall — restart Stormworks",
         toggle: "engine_mod",
         local: "engine_mod",
       },
       {
-        label: "Engine Boost",
-        sub: "Feed nearby engines + throttle (no teleport)",
-        toggle: "boost",
-        cmd: "boost_toggle",
+        label: "Overrev Engine Power",
+        sub: "25x engine torque — restart Stormworks",
+        toggle: "overrev_engine",
+        local: "overrev_engine",
       },
       {
         label: "Chaos Mode",
@@ -340,6 +340,7 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
       chaos: false,
       boost: false,
       engine_mod: false,
+      overrev_engine: false,
       massive_waves: false,
       ultra_waves: false,
       sirens_muted: true,
@@ -492,8 +493,8 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
           if (res && res.ok === false && item.toggle) {
             state.toggles[item.toggle] = !next;
           }
-          if (res && typeof res.installed === "boolean" && item.toggle === "engine_mod") {
-            state.toggles.engine_mod = !!res.installed;
+          if (res && typeof res.installed === "boolean" && item.toggle) {
+            state.toggles[item.toggle] = !!res.installed;
           }
           state.lastAction = (res && res.message) || item.label;
           notify();

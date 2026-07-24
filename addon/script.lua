@@ -21,10 +21,10 @@ local tsunami_phase = 0 -- 0 wait, 1 just cancelled (spawn next)
 local wave_dist = 150
 local wave_peer = 0
 local wave_pulse = 0 -- slight distance variation between crests
-local TSUNAMI_INTERVAL_NORMAL = 160
-local TSUNAMI_INTERVAL_ULTRA = 180
--- Long-lived crests — no cancel/respawn strobe (that bounced the whole sea)
-local TSUNAMI_INTERVAL_IMPOSSIBLE = 200
+local TSUNAMI_INTERVAL_NORMAL = 2700 -- 45 seconds
+local TSUNAMI_INTERVAL_ULTRA = 3600 -- 60 seconds
+-- Giant crests must travel instead of being cancelled every few seconds.
+local TSUNAMI_INTERVAL_IMPOSSIBLE = 3600
 local sirens_muted = true
 local tracked_sirens = {}
 local siren_refresh = 0
@@ -294,8 +294,8 @@ local function spawnMegaWaveNear(peer_id, dist)
 	if not mat then
 		return false
 	end
-	-- Mild magnitude — Mega Wave Engine shader adds the rest. High values + shader = levitation.
-	server.spawnTsunami(mat, 1.35)
+	-- The shader localizes the wall; magnitude drives the actual disaster event.
+	server.spawnTsunami(mat, 2.0)
 	if sirens_muted then
 		silenceSirens()
 	end
@@ -316,7 +316,7 @@ local function spawnImpossibleWave(peer_id, dist)
 	d = math.max(80, math.min(5000, d))
 	local mat = waveMatrix(peer_id, d, 0)
 	if not mat then return false end
-	server.spawnTsunami(mat, 1.65)
+	server.spawnTsunami(mat, 2.5)
 	if sirens_muted then silenceSirens() end
 	return true
 end

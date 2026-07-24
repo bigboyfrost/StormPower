@@ -61,10 +61,21 @@ function pathsFor(sw) {
   return {
     shader: path.join(sw, "rom", "graphics", "shaders", "ocean_common.glslh"),
     env: path.join(sw, "rom", "data", "realtime_values", "environment.txt"),
+    definitions: path.join(sw, "rom", "data", "definitions"),
     backup: path.join(sw, "rom", "stormpower_backup"),
     marker: path.join(sw, "rom", "stormpower_backup", "INSTALLED.txt"),
+    overrevMarker: path.join(sw, "rom", "stormpower_backup", "OVERREV_INSTALLED.txt"),
   };
 }
+
+const OVERREV_DEFINITIONS = [
+  "engine.xml",
+  "aircraft_engine.xml",
+  "engine_diesel.xml",
+  "modular_engine_cylinder_straight.xml",
+  "modular_engine_piston_3x3.xml",
+  "modular_engine_piston_5x5.xml",
+];
 
 function isInstalled() {
   const sw = findStormworks();
@@ -72,6 +83,17 @@ function isInstalled() {
   const p = pathsFor(sw);
   const installed = fs.existsSync(p.marker);
   return { installed, stormworks: sw, paths: p };
+}
+
+function isOverrevInstalled() {
+  const sw = findStormworks();
+  if (!sw) return { installed: false, stormworks: null, reason: "Stormworks not found" };
+  const p = pathsFor(sw);
+  return {
+    installed: fs.existsSync(p.overrevMarker),
+    stormworks: sw,
+    paths: p,
+  };
 }
 
 function ensureDir(d) {
@@ -111,7 +133,7 @@ function install() {
   return {
     ok: true,
     installed: true,
-    message: "Mega-wave engine ON (~45% taller crests) — restart Stormworks",
+    message: "Mega-wave engine ON (localized island-scale wall) — restart Stormworks",
     stormworks: status.stormworks,
   };
 }
@@ -154,6 +176,91 @@ function setInstalled(wantOn) {
   return uninstall();
 }
 
+function installOverrev() {
+  const status = isOverrevInstalled();
+  if (!status.stormworks) {
+    return { ok: false, installed: false, message: "Stormworks not found" };
+  }
+
+  const p = status.paths;
+  const backupDir = path.join(p.backup, "definitions");
+  ensureDir(backupDir);
+  let patched = 0;
+
+  for (const name of OVERREV_DEFINITIONS) {
+    const target = path.join(p.definitions, name);
+    if (!fs.existsSync(target)) continue;
+    const backup = path.join(backupDir, name);
+    if (!fs.existsSync(backup)) copyFile(target, backup);
+
+    // Always patch from the pristine backup, so repeated installs never multiply twice.
+    const stock = fs.readFileSync(backup, "utf8");
+    const boosted = stock.replace(/engine_max_force="([0-9.]+)"/, (_all, raw) => {
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value <= 0) return _all;
+      return `engine_max_force="${Math.round(value * 25)}"`;
+    });
+    if (boosted !== stock) {
+      fs.writeFileSync(target, boosted, "utf8");
+      patched += 1;
+    }
+  }
+
+  if (!patched) {
+    return {
+      ok: false,
+      installed: false,
+      message: "No supported engine definitions were found",
+    };
+  }
+
+  fs.writeFileSync(
+    p.overrevMarker,
+    `StormPower 25x engine torque ${new Date().toISOString()}\n`,
+    "utf8"
+  );
+  return {
+    ok: true,
+    installed: true,
+    message: `Overrev Power ON (${patched} engine types, 25x torque) — restart Stormworks`,
+    stormworks: status.stormworks,
+  };
+}
+
+function uninstallOverrev() {
+  const status = isOverrevInstalled();
+  if (!status.stormworks) {
+    return { ok: false, installed: false, message: "Stormworks not found" };
+  }
+
+  const p = status.paths;
+  const backupDir = path.join(p.backup, "definitions");
+  let restored = 0;
+  for (const name of OVERREV_DEFINITIONS) {
+    const backup = path.join(backupDir, name);
+    if (!fs.existsSync(backup)) continue;
+    copyFile(backup, path.join(p.definitions, name));
+    restored += 1;
+  }
+  try {
+    fs.unlinkSync(p.overrevMarker);
+  } catch (_) {}
+
+  return {
+    ok: restored > 0,
+    installed: false,
+    message:
+      restored > 0
+        ? `Overrev Power OFF (${restored} engine types restored) — restart Stormworks`
+        : "No Overrev Power backups found; use Steam Verify integrity",
+    stormworks: status.stormworks,
+  };
+}
+
+function setOverrevInstalled(wantOn) {
+  return wantOn ? installOverrev() : uninstallOverrev();
+}
+
 module.exports = {
   engineModRoot,
   findStormworks,
@@ -161,4 +268,8 @@ module.exports = {
   install,
   uninstall,
   setInstalled,
+  isOverrevInstalled,
+  installOverrev,
+  uninstallOverrev,
+  setOverrevInstalled,
 };

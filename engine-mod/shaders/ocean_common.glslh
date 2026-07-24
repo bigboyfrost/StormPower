@@ -25,16 +25,16 @@ vec2 rotate(vec2 v, float angle)
     return Result;
 }
 
-// StormPower Mega Wave Engine — mild crest boost only.
-// Keep stock wavelength/speed so the ocean does not "bounce" globally.
-// Height 100 -> 145 (~45% taller disaster crests). Do NOT widen phase.
+// StormPower Mega Wave Engine — a narrow, localized rogue-wave wall.
+// The old 0.004 phase spread the displacement across most of the loaded sea,
+// making boats appear to levitate. 0.018 keeps the giant crest near its origin.
 vec3 get_gerstner_wave_offset(vec3 world_position, vec3 wave_origin, float time, float wave_magnitude, float whirlpool_factor, out vec3 normal)
 {
 	vec2 offset = (world_position.xz - wave_origin.xz);
 	float offset_magnitude = length(offset);
 	vec2 offset_dir = normalize(offset);
 
-	float wave_phase = (dot(offset_dir, offset) * 0.01) - (time * 0.2 * (1.0 - whirlpool_factor));
+	float wave_phase = (dot(offset_dir, offset) * 0.018) - (time * 0.24 * (1.0 - whirlpool_factor));
 
 	float swirl_factor = (1.0 + cos(clamp(wave_phase * 0.5, -3.14159265, 3.14159265))) * 0.5 * wave_magnitude * whirlpool_factor;  //Cosine falloff
 	float swirl_angle = (swirl_factor * 500.0) / (offset_magnitude + 50.0); //Constant arc-distance for increasing radius
@@ -57,5 +57,8 @@ vec3 get_gerstner_wave_offset(vec3 world_position, vec3 wave_origin, float time,
 	float curve  = curve_factor / ((wave_phase * wave_phase) + curve_factor) - (curve_factor * 0.1);
 	
 	normal = vec3(-offset_dir_rotated.x / (offset_magnitude * offset_magnitude), 0.0, -offset_dir_rotated.y / (offset_magnitude * offset_magnitude)) * wave_magnitude;
-	return vec3(delta_offset.x, 0.0, delta_offset.y) + vec3(0.f, curve * 145.0 * wave_magnitude * wave_polarity, 0.f);
+	// 900m base coefficient: mode magnitude controls final height.
+	// At Ultra's 2.5 magnitude the mathematical crest exceeds 2km, while
+	// remaining a localized wall rather than lifting the entire ocean.
+	return vec3(delta_offset.x, 0.0, delta_offset.y) + vec3(0.f, curve * 900.0 * wave_magnitude * wave_polarity, 0.f);
 }
