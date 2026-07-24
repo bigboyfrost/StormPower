@@ -190,12 +190,11 @@ function showMainWindow() {
   if (!detached) placeWindows(menu.settings.side);
   if (!detached) mainWindow.setAlwaysOnTop(true, "screen-saver");
   mainWindow.setFocusable(true);
-  if (detached) {
-    mainWindow.show();
-  } else {
-    mainWindow.showInactive();
-    mainWindow.moveTop();
-  }
+  // Take focus so arrow keys work without rapid-clicking the panel
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.moveTop();
+  sendMain("menu-focused", { open: true });
 }
 
 function hideMainWindow() {
@@ -466,6 +465,20 @@ app.whenReady().then(async () => {
 
   placeWindows(menu.settings.side);
   showToggleAlways();
+  // Keep menu keyboard-ready: re-assert focus while open (game steals it otherwise)
+  setInterval(() => {
+    if (!menu || !menu.open) return;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (detached) return;
+    try {
+      if (!mainWindow.isFocused()) {
+        mainWindow.setFocusable(true);
+        mainWindow.show();
+        mainWindow.focus();
+        mainWindow.moveTop();
+      }
+    } catch (_) {}
+  }, 700);
   setInterval(() => {
     if (toggleWindow && !toggleWindow.isDestroyed()) {
       toggleWindow.setAlwaysOnTop(true, "screen-saver");
@@ -541,20 +554,48 @@ ipcMain.handle("update-ui-info", async () => {
   return cachedUpdateInfo;
 });
 ipcMain.handle("update-ui-apply", async () => {
-  const info = await checkForUpdates({
-    silent: false,
-    apply: true,
-    onProgress: (p) => sendUpdate("update-progress", p),
-  });
-  cachedUpdateInfo = info;
-  if (info?.applied) sendMain("update-available", { ...info, updateAvailable: false });
-  return info;
+  // Close StormPower FIRST, then install (Windows locks files while open)
+  const root = path.resolve(__dirname, "..");
+  const script = path.join(__dirname, "run-update-and-relaunch.js");
+  try {
+    const child = spawn("node.exe", [script], {
+      cwd: root,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      env: { ...process.env },
+    });
+    child.unref();
+  } catch (err) {
+    console.error("[StormPower] failed to spawn updater", err);
+    return { applied: false, message: String(err.message || err) };
+  }
+  setTimeout(() => app.quit(), 250);
+  return {
+    applied: true,
+    closing: true,
+    message: "Closing StormPower to install the update…",
+  };
 });
 ipcMain.on("update-ui-close", () => {
   if (updateWindow && !updateWindow.isDestroyed()) updateWindow.close();
   else if (UPDATE_UI_ONLY) app.quit();
 });
-ipcMain.on("update-ui-restart", () => relaunchStormPower());
+ipcMain.on("update-ui-restart", () => {
+  // Same quit-then-install path
+  const root = path.resolve(__dirname, "..");
+  const script = path.join(__dirname, "run-update-and-relaunch.js");
+  try {
+    const child = spawn("node.exe", [script], {
+      cwd: root,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.unref();
+  } catch (_) {}
+  setTimeout(() => app.quit(), 250);
+});
 
 function readVersion() {
   try {

@@ -392,6 +392,41 @@ input[type="range"]::-webkit-slider-thumb {
   font-weight: 300;
 }
 
+.ios-switch {
+  width: 51px;
+  height: 31px;
+  border-radius: 999px;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: #3a3a3c;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease;
+  -webkit-app-region: no-drag;
+}
+
+.ios-switch.on {
+  background: #34c759;
+}
+
+.ios-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s ease;
+}
+
+.ios-switch.on .ios-knob {
+  transform: translateX(20px);
+}
+
 .list li.active {
   background: rgba(0, 0, 0, 0.55);
   border-color: rgba(77, 180, 255, 0.45);
@@ -401,6 +436,10 @@ input[type="range"]::-webkit-slider-thumb {
   background: #000;
   color: var(--blue-bright);
   border-color: var(--blue);
+}
+
+.list li.active .ios-switch {
+  box-shadow: 0 0 0 2px rgba(77, 180, 255, 0.35);
 }
 
 .list li.active .label {

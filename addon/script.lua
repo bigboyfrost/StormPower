@@ -38,11 +38,11 @@ local chaos = {
 	step = 0,
 }
 
--- Vehicle boost: continuously shove seated vehicle forward
+-- Vehicle boost: +40 knots (≈20.58 m/s). Applied as displacement per tick.
 local boost = {
 	active = false,
 	peer = 0,
-	strength = 12, -- meters per tick along vehicle forward
+	knots = 40,
 }
 
 local session = {
@@ -348,13 +348,15 @@ local function getSeatedVehicle(peer_id)
 	return nil
 end
 
-local function applyVehicleBoost(peer_id, strength)
+local function applyVehicleBoost(peer_id, game_ticks)
 	local vid = getSeatedVehicle(peer_id)
 	if not vid then return false end
 	local mat, ok = server.getVehiclePos(vid)
 	if not ok or not mat then return false end
-	-- Shove along vehicle local +Z (forward)
-	local moved = matrix.multiply(mat, matrix.translation(0, 0, strength or boost.strength))
+	-- +40 knots ≈ 20.577 m/s. game runs ~60 ticks/sec → meters this frame
+	local gt = math.max(1, game_ticks or 1)
+	local meters = (boost.knots * 0.514444) * (gt / 60)
+	local moved = matrix.multiply(mat, matrix.translation(0, 0, meters))
 	server.moveVehicle(vid, moved)
 	return true
 end
@@ -365,17 +367,26 @@ local function stopChaos()
 	chaos.step = 0
 end
 
+local function endChaosCleanup(peer_id, reason)
+	stopChaos()
+	sea_mode = 0
+	server.cancelGerstner()
+	setWeatherState(0, 0, 0, 0)
+	server.setAudioMood(-1, 0)
+	cleanup(peer_id)
+	notify(peer_id, reason or "Chaos ended — cleaned up")
+	announce(peer_id, reason or "Chaos Mode stopped. Spawns cleared.")
+end
+
 local function startChaos(peer_id)
 	chaos.active = true
 	chaos.peer = peer_id
 	chaos.t = 0
 	chaos.step = 0
-	-- Make sure the world can hurt them
 	server.setGameSetting("player_damage", true)
 	server.setGameSetting("vehicle_damage", true)
 	server.setGameSetting("npc_damage", true)
 	server.setGameSetting("no_clip", false)
-	-- Max seas + absurd wind
 	sea_mode = 4
 	wave_peer = peer_id
 	wave_dist = math.max(80, session.dist or 120)
@@ -383,9 +394,9 @@ local function startChaos(peer_id)
 	tsunami_phase = 1
 	setWeatherState(0.4, 1, 1, 50)
 	server.setAudioMood(-1, 3)
-	sirens_muted = false -- let the chaos be loud
-	announce(peer_id, "CHAOS MODE — everything is trying to kill you.")
-	notify(peer_id, "CHAOS MODE ON")
+	sirens_muted = false
+	announce(peer_id, "CHAOS MODE — 20 seconds. Then auto-stops and cleans up.")
+	notify(peer_id, "CHAOS MODE ON (20s)")
 end
 
 local function chaosTick(gt)
@@ -395,12 +406,16 @@ local function chaosTick(gt)
 	local char_id = getCharacter(peer)
 	local pos, pok = server.getPlayerPos(peer)
 
-	-- Every ~45 ticks: spawn a wave of threats (capped counts — no PC meltdown)
+	-- Hard stop at 20 seconds — always clean up
+	if chaos.t >= 60 * 20 then
+		endChaosCleanup(peer, "Chaos ended (20s) — cleaned up")
+		return
+	end
+
 	if chaos.t % 45 < gt then
 		chaos.step = chaos.step + 1
 		local s = chaos.step
 
-		-- Animals / monsters nearby
 		if pok then
 			for i = 1, 3 do
 				local a = (i / 3) * math.pi * 2 + chaos.t * 0.01
@@ -410,13 +425,12 @@ local function chaosTick(gt)
 			end
 			if s % 2 == 0 then
 				local mat = matrix.translation(pos[13] + 12, pos[14], pos[15] + 8)
-				local oid, ok = server.spawnCreature(mat, 1, 1.5) -- grizzly
+				local oid, ok = server.spawnCreature(mat, 1, 1.5)
 				if ok then track("object", oid) end
 			end
 		end
 
-		-- Explosions / fire around (not every tick)
-		if pok and s % 1 == 0 then
+		if pok then
 			for i = 0, 3 do
 				local a = (i / 4) * math.pi * 2 + s
 				local mat = matrix.translation(pos[13] + math.cos(a) * 10, pos[14], pos[15] + math.sin(a) * 10)
@@ -427,7 +441,6 @@ local function chaosTick(gt)
 			if ok then track("object", oid) end
 		end
 
-		-- Disasters
 		if pok then
 			local dmat = matrix.translation(pos[13] + 90, 0, pos[15] + 40)
 			if s % 3 == 1 then server.spawnTornado(dmat)
@@ -436,32 +449,21 @@ local function chaosTick(gt)
 			pulseWaveCycle(peer)
 		end
 
-		-- Bleed HP each step
 		if char_id then
 			local hp = math.max(0, 100 - s * 12)
 			server.setCharacterData(char_id, hp, false, false)
 			if hp <= 5 or s >= 10 then
 				server.killCharacter(char_id)
 				announce(peer, "CHAOS MODE got you.")
-				notify(peer, "You died.")
-				stopChaos()
-				-- Leave seas raging a bit
+				endChaosCleanup(peer, "Chaos finished — cleaned up")
 				return
 			end
 		end
 	end
 
-	-- Soft continuous pressure: tiny nearby blasts less often
 	if pok and chaos.t % 20 < gt then
 		local mat = matrix.translation(pos[13] + (math.random() - 0.5) * 14, pos[14], pos[15] + (math.random() - 0.5) * 14)
 		server.spawnExplosion(mat, 0.35)
-	end
-
-	-- Hard timeout safety (~25s) then force kill
-	if chaos.t > 60 * 25 then
-		if char_id then server.killCharacter(char_id) end
-		stopChaos()
-		notify(peer, "Chaos timed out — finishing you")
 	end
 end
 
@@ -671,11 +673,7 @@ local function runCommand(line)
 	elseif cmd == "chaos" then
 		local mode = tostring(p[3] or "on")
 		if mode == "off" or mode == "0" or mode == "stop" then
-			stopChaos()
-			sea_mode = 0
-			server.cancelGerstner()
-			setWeatherState(0, 0, 0, 0)
-			notify(peer_id, "Chaos stopped")
+			endChaosCleanup(peer_id, "Chaos stopped — cleaned up")
 		else
 			startChaos(peer_id)
 		end
@@ -693,8 +691,8 @@ local function runCommand(line)
 			else
 				boost.active = true
 				boost.peer = peer_id
-				notify(peer_id, "Vehicle boost ON")
-				announce(peer_id, "Boosting — hold on. Toggle off from Other when done.")
+				notify(peer_id, "Boost +40 kn")
+				announce(peer_id, "Vehicle boost +40 knots. Toggle off when done.")
 			end
 		end
 
@@ -905,12 +903,10 @@ function onTick(game_ticks)
 		end
 	end
 
-	-- Vehicle boost: shove seated vehicle forward every tick
+	-- Vehicle boost: +40 knots while seated
 	if boost.active then
 		local peer = resolvePeer(boost.peer)
-		if not applyVehicleBoost(peer, boost.strength) then
-			-- Left the seat — keep flag but don't spam; user can re-enable
-		end
+		applyVehicleBoost(peer, gt)
 	end
 
 	chaosTick(gt)

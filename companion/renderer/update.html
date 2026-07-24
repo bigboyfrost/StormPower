@@ -407,6 +407,14 @@
       try {
         const res = await window.stormpowerUpdate.applyUpdate();
         progress.classList.remove("show");
+        if (res?.closing) {
+          phase = "done";
+          setStatus("working", "Closing StormPower to install…");
+          subtitle.textContent = "The app will reopen on the new version.";
+          actionBtn.disabled = true;
+          laterBtn.disabled = true;
+          return;
+        }
         if (res?.applied) {
           phase = "done";
           setStatus("done", res.message || `Updated to v${res.latest}. Restart to finish install.`);

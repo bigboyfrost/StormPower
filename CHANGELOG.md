@@ -1,19 +1,14 @@
 ﻿# StormPower Changelog
 
+## 1.4.5
+- iPhone-style toggles instead of separate On/Off buttons
+- Menu keeps keyboard focus so arrow keys work without rapid clicking
+- Vehicle boost capped at +40 knots
+- Chaos Mode auto-stops and cleans up after 20 seconds
+- Updater closes StormPower before installing files
+
 ## 1.4.4
-- FIXED auto-updater: was copying the wrong folder from the friends zip (VERSION never updated)
-- FIXED auto-updater: Windows file locks — update now stages, then installs after Restart
-- start.bat / update.bat finish any pending update before launch
-- Auto-update prefers GitHub source zipball (reliable root folder)
+- Auto-updater fixes (wrong zip root + Windows file locks)
 
 ## 1.4.3
-- Other tab: CHAOS MODE + Vehicle Boost, 50x wind, ultra waves, gun autofire fix
-
-## 1.4.2
-- Friend-ready zip pack
-
-## 1.4.1
-- Custom HTML update screen
-
-## 1.4.0
-- Blue theme, pop-out, waves, explosions, sirens
+- Chaos Mode, Vehicle Boost, 50x wind, gun autofire fix

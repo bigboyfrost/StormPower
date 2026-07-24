@@ -90,13 +90,33 @@
     (state.items || []).forEach((item, idx) => {
       const li = document.createElement("li");
       if (item.active) li.classList.add("active");
+      if (item.toggle) li.classList.add("has-toggle");
+
+      const right = item.folder
+        ? `<span class="chev">›</span>`
+        : item.toggle
+          ? `<button type="button" class="ios-switch ${item.on ? "on" : ""}" data-idx="${idx}" aria-label="Toggle ${item.label}"><span class="ios-knob"></span></button>`
+          : `<span class="chev"></span>`;
+
       li.innerHTML = `
         <span class="idx">${item.i}</span>
         <span class="label">${item.label}</span>
-        <span class="chev">${item.folder ? "›" : ""}</span>
+        ${right}
         ${item.sub ? `<span class="sub">${item.sub}</span>` : ""}
       `;
-      li.addEventListener("click", () => window.stormpower?.activateIndex(idx));
+
+      const sw = li.querySelector(".ios-switch");
+      if (sw) {
+        sw.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.stormpower?.activateIndex(idx);
+        });
+      }
+      li.addEventListener("click", (e) => {
+        if (e.target.closest(".ios-switch")) return;
+        window.stormpower?.activateIndex(idx);
+      });
       listEl.appendChild(li);
     });
     listEl.querySelector(".active")?.scrollIntoView({ block: "nearest" });

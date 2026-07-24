@@ -49,13 +49,6 @@ const MENU = {
       { label: "Clean Up Spawns", sub: "Remove StormPower spawns", cmd: "cleanup" },
     ],
   },
-  side: {
-    title: "Overlay Side",
-    items: [
-      { label: "Appear on Left", sub: "Default", cmd: "set_side", side: "left" },
-      { label: "Appear on Right", cmd: "set_side", side: "right" },
-    ],
-  },
   animals: {
     title: "Animals",
     items: [
@@ -210,13 +203,26 @@ const MENU = {
       { label: "Ultra Wind x5", sub: "Pushes weather wind hard", cmd: "ultra_wind", wind: 5 },
       { label: "Ultra Wind x10", sub: "Hard wind push", cmd: "ultra_wind", wind: 10 },
       { label: "50x Wind", sub: "Absurd wind force (x50)", cmd: "ultra_wind", wind: 50 },
-      { label: "MASSIVE WAVES", sub: "Cancel+respawn tsunami loop @ spawn dist", cmd: "sea", mode: 2, wind: 1 },
-      { label: "ULTRA MASSIVE WAVES", sub: "Stacked pulse + whirlpool swap + wind 50", cmd: "sea", mode: 4, wind: 50 },
-      { label: "Stop Massive Waves", sub: "Cancel wave events, calm wind", cmd: "sea", mode: 0, wind: 0 },
+      {
+        label: "Massive Waves",
+        sub: "Tsunami pulse loop at spawn distance",
+        toggle: "massive_waves",
+        cmd: "sea_toggle",
+      },
+      {
+        label: "Ultra Massive Waves",
+        sub: "Stacked pulses + wind x50",
+        toggle: "ultra_waves",
+        cmd: "sea_toggle_ultra",
+      },
       { label: "Spawn One Mega Wave", sub: "Uses spawn distance in front of you", cmd: "mega_wave" },
-      { label: "Disable Disaster Sirens", sub: "Force-mute warning towers", cmd: "sirens", mode: "off" },
-      { label: "Enable Disaster Sirens", sub: "Allow warning towers again", cmd: "sirens", mode: "on" },
-      { label: "Despawn Siren Towers", sub: "Remove towers entirely (nuclear option)", cmd: "sirens", mode: "kill" },
+      {
+        label: "Mute Disaster Sirens",
+        sub: "Force warning towers off",
+        toggle: "sirens_muted",
+        cmd: "sirens_toggle",
+      },
+      { label: "Despawn Siren Towers", sub: "Remove towers entirely", cmd: "sirens", mode: "kill" },
       { label: "Heavy Fog", cmd: "weather", fog: 1, rain: 0, wind: 0.2 },
       { label: "Heavy Rain + Wind", cmd: "weather", fog: 0.2, rain: 1, wind: 0.85 },
     ],
@@ -225,28 +231,16 @@ const MENU = {
     title: "Other",
     items: [
       {
-        label: "CHAOS MODE",
-        sub: "Everything tries to kill you. Hold on.",
-        cmd: "chaos",
-        mode: "on",
+        label: "Chaos Mode",
+        sub: "20s apocalypse, then auto-cleans up",
+        toggle: "chaos",
+        cmd: "chaos_toggle",
       },
       {
-        label: "Stop Chaos",
-        sub: "End the apocalypse early",
-        cmd: "chaos",
-        mode: "off",
-      },
-      {
-        label: "Vehicle Boost ON",
-        sub: "Shoves your current vehicle forward hard",
-        cmd: "boost",
-        mode: "on",
-      },
-      {
-        label: "Vehicle Boost OFF",
-        sub: "Stop the speed shove",
-        cmd: "boost",
-        mode: "off",
+        label: "Vehicle Boost",
+        sub: "+40 knots while seated",
+        toggle: "boost",
+        cmd: "boost_toggle",
       },
     ],
   },
@@ -273,15 +267,23 @@ const MENU = {
   rules: {
     title: "Game Rules",
     items: [
-      { label: "Infinite Fuel ON", cmd: "setting", key: "infinite_fuel", value: 1 },
-      { label: "Infinite Fuel OFF", cmd: "setting", key: "infinite_fuel", value: 0 },
-      { label: "Infinite Batteries ON", cmd: "setting", key: "infinite_batteries", value: 1 },
-      { label: "No Clip ON", cmd: "setting", key: "no_clip", value: 1 },
-      { label: "No Clip OFF", cmd: "setting", key: "no_clip", value: 0 },
-      { label: "Player Damage OFF", cmd: "setting", key: "player_damage", value: 0 },
-      { label: "Player Damage ON", cmd: "setting", key: "player_damage", value: 1 },
-      { label: "Vehicle Damage OFF", cmd: "setting", key: "vehicle_damage", value: 0 },
+      { label: "Infinite Fuel", toggle: "infinite_fuel", cmd: "setting_toggle", key: "infinite_fuel" },
+      { label: "Infinite Batteries", toggle: "infinite_batteries", cmd: "setting_toggle", key: "infinite_batteries" },
+      { label: "No Clip", toggle: "no_clip", cmd: "setting_toggle", key: "no_clip" },
+      { label: "Player Damage", toggle: "player_damage", cmd: "setting_toggle", key: "player_damage", defaultOn: true },
+      { label: "Vehicle Damage", toggle: "vehicle_damage", cmd: "setting_toggle", key: "vehicle_damage", defaultOn: true },
       { label: "Unlock All Islands", cmd: "setting", key: "unlock_all_islands", value: 1 },
+    ],
+  },
+  side: {
+    title: "Overlay Side",
+    items: [
+      {
+        label: "Menu on Right",
+        sub: "Off = left side",
+        toggle: "side_right",
+        cmd: "side_toggle",
+      },
     ],
   },
 };
@@ -293,7 +295,23 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
     cursor: 0,
     settings: loadSettings(),
     lastAction: "",
+    toggles: {
+      chaos: false,
+      boost: false,
+      massive_waves: false,
+      ultra_waves: false,
+      sirens_muted: true,
+      infinite_fuel: false,
+      infinite_batteries: false,
+      no_clip: false,
+      player_damage: true,
+      vehicle_damage: true,
+      side_right: false,
+    },
   };
+
+  // Sync side toggle from saved settings
+  state.toggles.side_right = state.settings.side === "right";
 
   function page() {
     return MENU[state.stack[state.stack.length - 1]] || MENU.home;
@@ -303,12 +321,20 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
     if (typeof onChange === "function") onChange(getSnapshot());
   }
 
-  function buildCommand(item) {
+  function peerId() {
+    return Math.max(0, Math.floor(Number(state.settings.peer) || 0));
+  }
+
+  function distM() {
+    return Math.max(1, Math.min(5000, Math.floor(Number(state.settings.dist) || 20)));
+  }
+
+  function buildCommand(item, toggleOn) {
     const s = state.settings;
-    const peer = Math.max(0, Math.floor(Number(s.peer) || 0));
+    const peer = peerId();
     const count = Math.max(1, Math.floor(Number(s.count) || 1));
     const size = Math.max(0.5, Number(s.size) || 1);
-    const dist = Math.max(1, Math.min(5000, Math.floor(Number(s.dist) || 20)));
+    const dist = distM();
 
     switch (item.cmd) {
       case "spawn_animal":
@@ -327,16 +353,27 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
         return `weather|${peer}|${item.fog}|${item.rain}|${item.wind}`;
       case "sea":
         return `sea|${peer}|${item.mode}|${item.wind}|${dist}`;
+      case "sea_toggle":
+        return toggleOn ? `sea|${peer}|2|1|${dist}` : `sea|${peer}|0|0|${dist}`;
+      case "sea_toggle_ultra":
+        return toggleOn ? `sea|${peer}|4|50|${dist}` : `sea|${peer}|0|0|${dist}`;
       case "ultra_wind":
         return `ultra_wind|${peer}|${item.wind}`;
       case "mega_wave":
         return `mega_wave|${peer}|${dist}`;
       case "sirens":
         return `sirens|${peer}|${item.mode}`;
+      case "sirens_toggle":
+        // toggle ON = muted
+        return `sirens|${peer}|${toggleOn ? "off" : "on"}`;
       case "chaos":
         return `chaos|${peer}|${item.mode}`;
+      case "chaos_toggle":
+        return `chaos|${peer}|${toggleOn ? "on" : "off"}`;
       case "boost":
         return `boost|${peer}|${item.mode}`;
+      case "boost_toggle":
+        return `boost|${peer}|${toggleOn ? "on" : "off"}`;
       case "explode":
         return `explode|${peer}|${item.mag}|${dist}`;
       case "explode_ring":
@@ -361,6 +398,8 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
         return `cleanup|${peer}`;
       case "setting":
         return `setting|${peer}|${item.key}|${item.value}`;
+      case "setting_toggle":
+        return `setting|${peer}|${item.key}|${toggleOn ? 1 : 0}`;
       default:
         return null;
     }
@@ -376,8 +415,40 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
       notify();
       return;
     }
+
+    if (item.toggle) {
+      const key = item.toggle;
+      const next = !state.toggles[key];
+      state.toggles[key] = next;
+
+      // Exclusive wave modes
+      if (key === "massive_waves" && next) state.toggles.ultra_waves = false;
+      if (key === "ultra_waves" && next) state.toggles.massive_waves = false;
+      if ((key === "massive_waves" || key === "ultra_waves") && !next) {
+        // turning off is fine
+      }
+
+      if (item.cmd === "side_toggle") {
+        state.settings.side = next ? "right" : "left";
+        saveSettings(state.settings);
+        state.lastAction = "Side: " + state.settings.side;
+        if (typeof onSideChange === "function") onSideChange(state.settings.side);
+        notify();
+        return;
+      }
+
+      const line = buildCommand(item, next);
+      if (line) {
+        enqueue(line);
+        state.lastAction = `${item.label}: ${next ? "ON" : "OFF"}`;
+        notify();
+      }
+      return;
+    }
+
     if (item.cmd === "set_side") {
       state.settings.side = item.side === "right" ? "right" : "left";
+      state.toggles.side_right = state.settings.side === "right";
       saveSettings(state.settings);
       state.lastAction = "Side: " + state.settings.side;
       if (typeof onSideChange === "function") onSideChange(state.settings.side);
@@ -447,7 +518,10 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
   function updateSettings(partial) {
     state.settings = { ...state.settings, ...partial };
     saveSettings(state.settings);
-    if (partial.side && typeof onSideChange === "function") onSideChange(state.settings.side);
+    if (partial.side !== undefined) {
+      state.toggles.side_right = state.settings.side === "right";
+      if (typeof onSideChange === "function") onSideChange(state.settings.side);
+    }
     notify();
   }
 
@@ -463,9 +537,12 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
         label: it.label,
         sub: it.sub || "",
         folder: !!it.goto,
+        toggle: it.toggle || null,
+        on: it.toggle ? !!state.toggles[it.toggle] : false,
         active: i === state.cursor,
       })),
       settings: { ...state.settings },
+      toggles: { ...state.toggles },
       lastAction: state.lastAction,
     };
   }
@@ -483,7 +560,8 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
     for (let i = start; i < end; i++) {
       const it = snap.items[i];
       const mark = it.active ? ">" : " ";
-      lines.push(mark + it.i + " " + it.label);
+      const tog = it.toggle ? (it.on ? " [ON]" : " [OFF]") : "";
+      lines.push(mark + it.i + " " + it.label + tog);
     }
     if (snap.lastAction) lines.push(snap.lastAction);
     lines.push("[F4] close  [Bksp] back");
