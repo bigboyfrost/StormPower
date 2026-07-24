@@ -209,9 +209,9 @@ const MENU = {
       { label: "Clear / Calm Seas", sub: "No wind, flat water", cmd: "sea", mode: 0, wind: 0 },
       { label: "Choppy Seas", sub: "Wind 0.72", cmd: "sea", mode: 1, wind: 0.72 },
       { label: "Max Weather Waves", sub: "Wind 1.0 — tallest stock waves", cmd: "sea", mode: 1, wind: 1 },
-      { label: "Ultra Wind x5", sub: "Pushes weather wind hard", cmd: "ultra_wind", wind: 5 },
-      { label: "Ultra Wind x10", sub: "Hard wind push", cmd: "ultra_wind", wind: 10 },
-      { label: "50x Wind", sub: "Absurd wind force (x50)", cmd: "ultra_wind", wind: 50 },
+      { label: "Ultra Wind x5", sub: "Force only — not used by Ultra Waves", cmd: "ultra_wind", wind: 5 },
+      { label: "Ultra Wind x10", sub: "Force only — not used by Ultra Waves", cmd: "ultra_wind", wind: 10 },
+      { label: "50x Wind", sub: "Chaos shove only — never paired with Ultra Waves", cmd: "ultra_wind", wind: 50 },
       {
         label: "Massive Waves",
         sub: "Tsunami pulse loop at spawn distance",
@@ -220,14 +220,14 @@ const MENU = {
       },
       {
         label: "Ultra Massive Waves",
-        sub: "Stacked pulses + wind x50 (use Mega Wave Engine)",
+        sub: "Tall tsunamis — needs Mega Wave Engine (no x50 wind)",
         toggle: "ultra_waves",
         cmd: "sea_toggle_ultra",
       },
       { label: "Spawn One Mega Wave", sub: "Uses spawn distance in front of you", cmd: "mega_wave" },
       {
         label: "Mega Wave Engine",
-        sub: "Install/remove ocean shader patch from menu",
+        sub: "Patch ocean shader height (~4x) — restart Stormworks",
         toggle: "engine_mod",
         local: "engine_mod",
       },
@@ -387,7 +387,8 @@ function createMenuEngine({ enqueue, onChange, onSideChange, onLocalAction }) {
       case "sea_toggle":
         return toggleOn ? `sea|${peer}|2|1|${dist}` : `sea|${peer}|0|0|${dist}`;
       case "sea_toggle_ultra":
-        return toggleOn ? `sea|${peer}|4|50|${dist}` : `sea|${peer}|0|0|${dist}`;
+        // Wind stays at 1 — height comes from Mega Wave Engine shader, not force wind
+        return toggleOn ? `sea|${peer}|4|1|${dist}` : `sea|${peer}|0|0|${dist}`;
       case "ultra_wind":
         return `ultra_wind|${peer}|${item.wind}`;
       case "mega_wave":

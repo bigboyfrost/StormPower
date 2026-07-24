@@ -68,9 +68,9 @@ f32 volcano_rock_explosion_threshold 10.0
 f32 volcano_ash_factor_pow 10.0
 f32 volcano_ash_flow_impulse 400.0
 
-f32 whirlpool_vertical_force 1200.0
-f32 whirlpool_radial_force 180.0
-f32 whirlpool_tangent_force 150.0
+f32 whirlpool_vertical_force 400.0
+f32 whirlpool_radial_force 60.0
+f32 whirlpool_tangent_force 50.0
 
 f32 glowstick_light_radius 15.0
 f32 glowstick_light_intensity 5.0

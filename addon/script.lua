@@ -22,8 +22,9 @@ local wave_dist = 150
 local wave_peer = 0
 local wave_pulse = 0 -- rotates spawn distance / event type for bigger-than-stock feel
 local TSUNAMI_INTERVAL_NORMAL = 90
-local TSUNAMI_INTERVAL_ULTRA = 40
-local TSUNAMI_INTERVAL_IMPOSSIBLE = 18
+local TSUNAMI_INTERVAL_ULTRA = 70
+-- Tall gerstner waves need time to exist — do not strobe-cancel into chaos
+local TSUNAMI_INTERVAL_IMPOSSIBLE = 80
 local sirens_muted = true
 local tracked_sirens = {}
 local siren_refresh = 0
@@ -300,35 +301,22 @@ local function spawnMegaWaveNear(peer_id, dist)
 	return true
 end
 
--- Mode 4: try to feel "bigger than possible" by stacking tricks the engine allows
--- (only 1 gerstner at a time — so we pulse hard, swap tsunami/whirlpool, vary range)
+-- Mode 4: tall tsunamis only. Height comes from Mega Wave Engine (ocean shader),
+-- not from wind multipliers / whirlpools / meteors (those turn seas into chaos).
 local function spawnImpossibleWave(peer_id, dist)
-	dist = math.max(60, dist or wave_dist or 120)
+	dist = math.max(80, dist or wave_dist or 150)
 	wave_dist = dist
 	wave_peer = peer_id
 	wave_pulse = (wave_pulse or 0) + 1
-	local kind = wave_pulse % 4
-	-- Vary distance so successive crests hit from different ranges
+	local phase = wave_pulse % 3
 	local d = dist
-	if kind == 1 then d = dist * 0.55
-	elseif kind == 2 then d = dist * 1.35
-	elseif kind == 3 then d = dist * 0.85
+	if phase == 1 then d = dist * 0.92
+	elseif phase == 2 then d = dist * 1.12
 	end
-	d = math.max(50, math.min(5000, d))
-	local lateral = ((wave_pulse % 5) - 2) * 40
-	local mat = waveMatrix(peer_id, d, lateral)
+	d = math.max(80, math.min(5000, d))
+	local mat = waveMatrix(peer_id, d, 0)
 	if not mat then return false end
-
-	if kind == 2 then
-		server.spawnWhirlpool(mat, 4.0)
-	else
-		server.spawnTsunami(mat, 5.0)
-	end
-	-- Extra meteor-tsunami occasionally for water chaos
-	if wave_pulse % 7 == 0 then
-		local mat2 = waveMatrix(peer_id, d + 80, -lateral)
-		if mat2 then server.spawnMeteor(mat2, 1.0, true) end
-	end
+	server.spawnTsunami(mat, 5.0)
 	if sirens_muted then silenceSirens() end
 	return true
 end
@@ -713,7 +701,7 @@ local function runCommand(line)
 		if sea_mode < 1 then sea_mode = 1 end
 		applyWeather()
 		notify(peer_id, "Wind x" .. tostring(wind))
-		announce(peer_id, "Wind force set to x" .. tostring(wind) .. ". Wave height still engine-capped — use ULTRA MASSIVE WAVES for stacked pulses.")
+		announce(peer_id, "Wind force x" .. tostring(wind) .. " (vehicle shove). Wave height is separate — use Ultra Waves + Mega Wave Engine.")
 
 	elseif cmd == "sea" then
 		local mode = math.floor(num(p[3], 0))
@@ -732,11 +720,12 @@ local function runCommand(line)
 			notify(peer_id, "Seas calmed")
 			announce(peer_id, "Wave mode OFF")
 		else
-			local ultra = 0
-			if mode >= 3 then ultra = math.max(wind, 10) end
-			if mode >= 4 then ultra = math.max(wind, 50) end
-			if wind > 1 then ultra = math.max(ultra, wind); wind = 1 end
-			setWeatherState(weather_fog, weather_rain, wind, ultra)
+			-- Wave modes never use ultra wind — that yanks vehicles around.
+			-- Tall water comes from spawnTsunami magnitude + Mega Wave Engine shader.
+			local w = math.max(0, math.min(1, wind))
+			if wind > 1 then w = 1 end
+			if mode >= 2 then w = math.min(w, 1) end
+			setWeatherState(weather_fog, weather_rain, w, 0)
 			if mode >= 2 then
 				sirens_muted = true
 				silenceSirens()
@@ -744,11 +733,11 @@ local function runCommand(line)
 				tsunami_phase = 1
 				pulseWaveCycle(peer_id)
 				if mode >= 4 then
-					notify(peer_id, "ULTRA MASSIVE @ " .. math.floor(dist) .. "m (stacked)")
-					announce(peer_id, "Impossible wave mode: rapid cancel/respawn, tsunami/whirlpool swap, wind x50. Engine still allows only 1 gerstner — we stack pulses.")
+					notify(peer_id, "ULTRA WAVES @ " .. math.floor(dist) .. "m")
+					announce(peer_id, "Tall tsunami pulses ahead (no x50 wind). Enable Mega Wave Engine in the menu for real height.")
 				else
 					notify(peer_id, (mode >= 3 and "ULTRA " or "") .. "MASSIVE WAVES @ " .. math.floor(dist) .. "m")
-					announce(peer_id, "Tsunami cancel/respawn loop ahead of you at " .. math.floor(dist) .. "m. Sirens muted.")
+					announce(peer_id, "Tsunami loop ahead of you at " .. math.floor(dist) .. "m. Sirens muted.")
 				end
 			else
 				server.cancelGerstner()
@@ -760,7 +749,7 @@ local function runCommand(line)
 		local dist = math.max(80, math.min(5000, num(p[3], session.dist)))
 		wave_dist = dist
 		if spawnMegaWaveNear(peer_id, dist) then
-			setWeatherState(weather_fog, weather_rain, 1, ultra_wind)
+			setWeatherState(weather_fog, weather_rain, math.min(1, weather_wind > 0 and weather_wind or 1), 0)
 			if sirens_muted then silenceSirens() end
 			notify(peer_id, "Mega wave @ " .. math.floor(dist) .. "m ahead")
 		else
@@ -932,7 +921,7 @@ local function help(peer_id)
 	announce(peer_id, "?tsunami [dist]   Wave ahead of you")
 	announce(peer_id, "?sirens off|on|kill")
 	announce(peer_id, "?boom [0-1] [dist]   Explosion")
-	announce(peer_id, "?wind <0-50>   Ultra wind / waves")
+	announce(peer_id, "?wind <0-50>   Wind force only (not wave height)")
 	announce(peer_id, "?chaos / ?chaos off")
 	announce(peer_id, "?boost / ?boost off / ?boost flip   Seat vehicle speed boost")
 end
@@ -1183,7 +1172,7 @@ function onCustomCommand(full_message, peer_id, is_admin, is_auth, command, ...)
 		elseif mode == "choppy" then
 			runCommand("sea|" .. peer_id .. "|1|0.72|" .. session.dist)
 		elseif mode == "ultra" then
-			runCommand("sea|" .. peer_id .. "|4|50|" .. session.dist)
+			runCommand("sea|" .. peer_id .. "|4|1|" .. session.dist)
 		elseif mode == "mega" or mode == "massive" then
 			runCommand("sea|" .. peer_id .. "|2|1|" .. session.dist)
 		else

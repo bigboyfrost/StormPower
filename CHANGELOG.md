@@ -1,5 +1,10 @@
 ﻿# StormPower Changelog
 
+## 1.5.7
+- Ultra Waves no longer use x50 wind / whirlpool / meteor spam (that was chaos, not waves)
+- Tall seas come from tsunami magnitude + Mega Wave Engine ocean shader only
+- Slower wave pulse so gerstners can exist; engine mod keeps stock whirlpool forces
+
 ## 1.5.6
 - In-game Stormworks notify + announce when an update is available
 - Mega Wave Engine install/uninstall from the overlay menu (no bat required)
