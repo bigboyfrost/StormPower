@@ -1,21 +1,22 @@
-﻿{
-    "name":  "stormpower",
-    "productName":  "StormPower",
-    "version":  "1.1.0",
-    "description":  "StormPower â€” external spawn overlay for Stormworks. By Aimless Developement.",
-    "author":  "Aimless Developement",
-    "license":  "MIT",
-    "main":  "companion/main.js",
-    "scripts":  {
-                    "start":  "electron .",
-                    "update":  "node companion/updater.js"
-                },
-    "repository":  {
-                       "type":  "git",
-                       "url":  "https://github.com/bigboyfrost/StormPower.git"
-                   },
-    "dependencies":  {
-                         "electron":  "^33.2.0",
-                         "express":  "^4.21.2"
-                     }
+{
+    "name": "stormpower",
+    "productName": "StormPower",
+    "version": "1.2.0",
+    "description": "StormPower â€” external spawn overlay for Stormworks. By Aimless Developement.",
+    "author": "Aimless Developement",
+    "license": "MIT",
+    "main": "companion/main.js",
+    "scripts": {
+        "start": "electron .",
+        "update": "node companion/updater.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/bigboyfrost/StormPower.git"
+    },
+    "dependencies": {
+        "electron": "^33.2.0",
+        "express": "^4.21.2",
+        "node-global-key-listener": "^0.3.0"
+    }
 }

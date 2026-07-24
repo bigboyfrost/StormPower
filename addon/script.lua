@@ -1,5 +1,7 @@
 -- StormPower by Aimless Developement
--- External overlay bridge: http://127.0.0.1:21773/sw/poll
+-- Bridge: http://127.0.0.1:21773
+-- /sw/poll  = spawn commands
+-- /sw/ui    = fullscreen-safe on-screen menu mirror
 
 g_savedata = {
 	require_admin = property.checkbox("Require admin", false),
@@ -12,6 +14,11 @@ local spawned = {}
 local wind_boost = 0
 local weather_fog = 0
 local weather_rain = 0
+
+local UI_TITLE = 91001
+local UI_BODY = 91002
+local last_ui_text = ""
+local menu_open = false
 
 local function announce(peer_id, msg)
 	server.announce("StormPower", msg, peer_id or -1)
@@ -79,7 +86,6 @@ local function cleanup(peer_id)
 	notify(peer_id, "Cleaned " .. n)
 end
 
--- Stock API documents wind as 0-1. StormPower can push higher via wind_boost and re-applies each tick.
 local function setWeatherState(fog, rain, wind)
 	weather_fog = fog
 	weather_rain = rain
@@ -87,6 +93,30 @@ local function setWeatherState(fog, rain, wind)
 		server.setWeather(fog, rain, wind_boost)
 	else
 		server.setWeather(fog, rain, wind)
+	end
+end
+
+local function drawInGameUI(text, open)
+	menu_open = open
+	local players = server.getPlayers()
+	for i = 1, #players do
+		local peer = players[i].id
+		if open then
+			server.setPopupScreen(peer, UI_TITLE, "sp_title", true, "StormPower", -0.82, -0.72)
+			server.setPopupScreen(peer, UI_BODY, "sp_body", true, text, -0.82, -0.20)
+		else
+			-- Tiny always-on hint so fullscreen users know F4 works
+			server.setPopupScreen(peer, UI_TITLE, "sp_title", true, "SP [F4]", -0.90, -0.85)
+			server.removePopup(peer, UI_BODY)
+		end
+	end
+end
+
+local function hideInGameUI()
+	local players = server.getPlayers()
+	for i = 1, #players do
+		server.removePopup(players[i].id, UI_TITLE)
+		server.removePopup(players[i].id, UI_BODY)
 	end
 end
 
@@ -129,7 +159,7 @@ local function runCommand(line)
 			end
 		end
 		if n == 0 then
-			announce(peer_id, "Creature spawn failed (need Industrial Frontier DLC?)")
+			announce(peer_id, "Creature spawn failed (Industrial Frontier DLC?)")
 		else
 			notify(peer_id, "Spawned " .. n .. " @ " .. dist .. "m")
 		end
@@ -215,8 +245,8 @@ local function runCommand(line)
 		else
 			wind_boost = wind
 			server.setWeather(weather_fog, weather_rain, wind_boost)
-			notify(peer_id, "Wind boost " .. tostring(wind) .. "×")
-			announce(peer_id, "StormPower wind boost " .. tostring(wind) .. "× (above stock 1.0)")
+			notify(peer_id, "Wind boost " .. tostring(wind) .. "x")
+			announce(peer_id, "StormPower wind boost " .. tostring(wind) .. "x (above stock 1.0)")
 		end
 
 	elseif cmd == "heal" then
@@ -266,33 +296,74 @@ local function runCommand(line)
 	end
 end
 
+local function handleUiReply(reply)
+	if not reply or reply == "" then return end
+	if string.find(reply, "connect()", 1, true) or string.find(reply, "Connection refused", 1, true) then
+		return
+	end
+	local open_flag, text = string.match(reply, "^(%d+)\n([%s%S]*)")
+	if not open_flag then
+		open_flag = "0"
+		text = reply
+	end
+	local open = open_flag == "1"
+	if text ~= last_ui_text or open ~= menu_open then
+		last_ui_text = text
+		drawInGameUI(text or "", open)
+	end
+end
+
+local function handlePollReply(reply)
+	if not reply or reply == "" then return end
+	if string.find(reply, "connect()", 1, true) or string.find(reply, "Connection refused", 1, true) then
+		return
+	end
+	-- New multiplex format: CMD\n---\nOPEN\nUI...
+	local cmd, rest = string.match(reply, "^(.-)\n%-%-%-\n([%s%S]*)")
+	if cmd then
+		runCommand(cmd)
+		handleUiReply(rest)
+		return
+	end
+	-- Legacy: plain command only
+	runCommand(reply)
+end
+
 function onCreate(is_world_create)
 	spawned = {}
 	wind_boost = 0
 	tick_counter = 0
-	announce(-1, "StormPower online — launch the overlay and press F4. By Aimless Developement.")
+	announce(-1, "StormPower online. F4 opens menu (fullscreen uses on-screen HUD).")
+end
+
+function onDestroy()
+	hideInGameUI()
 end
 
 function onTick(game_ticks)
-	tick_counter = tick_counter + (game_ticks or 1)
+	local gt = game_ticks or 1
+	tick_counter = tick_counter + gt
+
 	if tick_counter >= POLL_EVERY then
 		tick_counter = 0
 		server.httpGet(PORT, "/sw/poll")
 	end
-	-- Reinforce super-wind every tick so the game cannot ease it back to stock.
 	if wind_boost > 0 then
 		server.setWeather(weather_fog, weather_rain, wind_boost)
 	end
 end
 
 function httpReply(port, request, reply)
-	if port == PORT and request == "/sw/poll" then
-		runCommand(reply)
+	if port ~= PORT then return end
+	if request == "/sw/poll" then
+		handlePollReply(reply)
+	elseif request == "/sw/ui" then
+		handleUiReply(reply)
 	end
 end
 
 function onCustomCommand(full_message, peer_id, is_admin, is_auth, command, ...)
 	if string.lower(command or "") == "?stormpower" then
-		announce(peer_id, "StormPower by Aimless Developement — use the overlay (F4).")
+		announce(peer_id, "StormPower by Aimless Developement — F4 / Insert / F8. Fullscreen uses on-screen HUD.")
 	end
 end

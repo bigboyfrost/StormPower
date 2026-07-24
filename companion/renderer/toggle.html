@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SP</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 52px;
+      height: 52px;
+      overflow: hidden;
+      background: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button {
+      width: 48px;
+      height: 48px;
+      margin: 2px;
+      border: none;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      color: #007aff;
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: -0.02em;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+    }
+    button.open {
+      background: #007aff;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <button id="btn" type="button" title="Toggle StormPower">SP</button>
+  <script>
+    const btn = document.getElementById("btn");
+    btn.addEventListener("click", () => {
+      if (window.stormpower) window.stormpower.toggleMenu();
+    });
+    if (window.stormpower) {
+      window.stormpower.onState((s) => {
+        btn.classList.toggle("open", !!s.open);
+      });
+    }
+  </script>
+</body>
+</html>

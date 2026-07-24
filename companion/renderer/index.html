@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>StormPower</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -47,20 +46,32 @@
             <input id="size" type="range" min="1" max="40" value="2" />
           </div>
         </div>
-        <div class="control">
-          <div class="control-label">
-            <span>Player peer ID</span>
-            <strong id="peerValue">0</strong>
+        <div class="row2">
+          <div class="control">
+            <div class="control-label">
+              <span>Peer ID</span>
+              <strong id="peerValue">0</strong>
+            </div>
+            <input id="peer" type="range" min="0" max="16" value="0" />
           </div>
-          <input id="peer" type="range" min="0" max="16" value="0" />
-          <p class="hint">Use 0 in singleplayer. Multiplayer: your ID from the player list.</p>
+          <div class="control side-control">
+            <div class="control-label"><span>Menu side</span></div>
+            <div class="segmented">
+              <button type="button" id="sideLeft" class="seg active">Left</button>
+              <button type="button" id="sideRight" class="seg">Right</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
     <section class="card menu-card">
-      <div class="breadcrumb" id="path">Home</div>
+      <div class="menu-toolbar">
+        <button type="button" id="backBtn" class="back-btn">‹ Back</button>
+        <div class="breadcrumb" id="path">Home</div>
+      </div>
       <ul id="list" class="list"></ul>
+      <div id="lastAction" class="last-action"></div>
     </section>
 
     <div id="updateBanner" class="update-banner hidden">
@@ -70,12 +81,12 @@
 
     <footer class="footer">
       <div class="keys">
-        <span><kbd>F4</kbd> show/hide</span>
+        <span><kbd>F4</kbd> toggle</span>
         <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
         <span><kbd>↵</kbd> select</span>
         <span><kbd>⌫</kbd> back</span>
       </div>
-      <p class="credit">StormPower · Aimless Developement</p>
+      <p class="credit">StormPower · Aimless Developement · fullscreen uses in-game HUD</p>
     </footer>
   </div>
   <script src="app.js"></script>

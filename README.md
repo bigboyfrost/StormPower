@@ -13,7 +13,15 @@ Toggle with **F4** — the game keeps focus (no tabbing out). Arrow keys are cap
 - Auto-updater for friends (`update.bat`)
 - Easy share via GitHub
 
-## Quick start
+## Fullscreen
+
+Exclusive fullscreen cannot draw an external window on top of Stormworks. StormPower solves this by **mirroring the menu inside the game** with on-screen popups:
+
+- Press **F4** / **Insert** / **F8** (captured globally)
+- The HUD on the left of your screen updates as you move with arrow keys
+- Enter selects, Backspace goes back
+
+Windowed / borderless still shows the Apple-style overlay + floating **SP** toggle button.
 
 1. Install [Node.js LTS](https://nodejs.org/)
 2. Run `install.bat`
