@@ -25,6 +25,13 @@ if not exist "node_modules\electron" (
   )
 )
 
+REM Apply staged update before launching (Electron locks files while running)
+if exist "_update_ready.json" (
+  echo  Finishing pending update...
+  node companion\finish-update.js --no-relaunch
+  echo.
+)
+
 REM Keep Stormworks addon in sync
 set "DEST=%APPDATA%\Stormworks\data\missions\StormPower"
 if not exist "%DEST%" mkdir "%DEST%"

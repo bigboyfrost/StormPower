@@ -1,8 +1,8 @@
-{
+﻿{
     "name": "stormpower",
     "productName": "StormPower",
-    "version": "1.4.3",
-    "description": "StormPower â€” external spawn overlay for Stormworks. By Aimless Developement.",
+    "version": "1.4.4",
+    "description": "StormPower Ã¢â‚¬â€ external spawn overlay for Stormworks. By Aimless Developement.",
     "author": "Aimless Developement",
     "license": "MIT",
     "main": "companion/main.js",
@@ -20,3 +20,4 @@
         "node-global-key-listener": "^0.3.0"
     }
 }
+

@@ -1,21 +1,19 @@
 ﻿# StormPower Changelog
 
+## 1.4.4
+- FIXED auto-updater: was copying the wrong folder from the friends zip (VERSION never updated)
+- FIXED auto-updater: Windows file locks — update now stages, then installs after Restart
+- start.bat / update.bat finish any pending update before launch
+- Auto-update prefers GitHub source zipball (reliable root folder)
+
 ## 1.4.3
-- Other tab: CHAOS MODE (tries to kill you) + Vehicle Boost
-- 50x wind mode
-- ULTRA MASSIVE WAVES stacked pulse (tsunami/whirlpool swap, faster cycle, wind x50)
-- Fixed guns auto-firing when given (spawn items inactive)
+- Other tab: CHAOS MODE + Vehicle Boost, 50x wind, ultra waves, gun autofire fix
 
 ## 1.4.2
-- Friend-ready zip pack with hardcoded GitHub repo (bigboyfrost/StormPower)
-- install.bat does full first-time setup (npm + addon)
-- START_HERE.txt for sharing with friends
+- Friend-ready zip pack
 
 ## 1.4.1
-- Custom HTML update screen with changelogs when running the updater
+- Custom HTML update screen
 
 ## 1.4.0
-- Blue theme, pop-out, ultra waves, explosions, siren mute
-
-## 1.3.2
-- Disaster siren mute + mega wave epicenter refresh
+- Blue theme, pop-out, waves, explosions, sirens

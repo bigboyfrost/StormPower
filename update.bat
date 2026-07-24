@@ -4,7 +4,6 @@ cd /d "%~dp0"
 
 echo.
 echo  StormPower updater
-echo  Opening changelog update screen...
 echo.
 
 where node >nul 2>nul || (
@@ -23,12 +22,21 @@ if not exist "node_modules\electron" (
   )
 )
 
+REM Finish any update that was staged while the app was open (file locks)
+if exist "_update_ready.json" (
+  echo  Finishing pending update...
+  node companion\finish-update.js --no-relaunch
+  echo.
+)
+
+echo  Opening changelog update screen...
 call npx electron . --update-ui
 if errorlevel 1 (
   echo.
-  echo Update UI failed. Falling back to console updater...
+  echo Update UI failed. Trying console updater...
   node companion\updater.js --apply
+  if exist "_update_ready.json" node companion\finish-update.js --no-relaunch
   echo.
-  echo Re-run start.bat after a successful update.
+  echo Done. Run start.bat
   pause
 )

@@ -13,7 +13,7 @@ const fs = require("fs");
 const express = require("express");
 const http = require("http");
 const { spawn } = require("child_process");
-const { checkForUpdates } = require("./updater");
+const { checkForUpdates, spawnFinishUpdate } = require("./updater");
 const { createMenuEngine } = require("./menuEngine");
 
 const PORT = 21773;
@@ -117,15 +117,21 @@ function openUpdateScreen(info) {
 }
 
 function relaunchStormPower() {
-  const root = path.resolve(__dirname, "..");
-  const electronPath = process.execPath;
-  const child = spawn(electronPath, [root], {
-    cwd: root,
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
-  app.quit();
+  // Finish installs AFTER this process exits (file locks on Windows)
+  try {
+    spawnFinishUpdate({ relaunch: true });
+  } catch (err) {
+    console.error("[StormPower] finish-update spawn failed", err);
+    // Fallback: try direct relaunch
+    const root = path.resolve(__dirname, "..");
+    const child = spawn(process.execPath, [root], {
+      cwd: root,
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  }
+  setTimeout(() => app.quit(), 300);
 }
 
 function placeWindows(side) {
@@ -439,6 +445,7 @@ function startLowLevelKeys() {
 
 app.whenReady().then(async () => {
   // Dedicated updater UI (update.bat / npm run update)
+  // NOTE: never install staged files while Electron is running — Windows locks .js
   if (UPDATE_UI_ONLY) {
     createUpdateWindow();
     console.log("[StormPower] update UI mode");

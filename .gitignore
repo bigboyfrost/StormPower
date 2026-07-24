@@ -1,6 +1,9 @@
 node_modules/
 _update.zip
 _update_extract/
+_update_staging/
+_update_ready.json
+_update_log.txt
 .DS_Store
 Thumbs.db
 *.log

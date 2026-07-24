@@ -409,13 +409,15 @@
         progress.classList.remove("show");
         if (res?.applied) {
           phase = "done";
-          setStatus("done", res.message || `Updated to v${res.latest}. Restart StormPower.`);
-          subtitle.textContent = "Update installed successfully.";
+          setStatus("done", res.message || `Updated to v${res.latest}. Restart to finish install.`);
+          subtitle.textContent = res.pendingRestart
+            ? "Downloaded. Restart quits the app so Windows can overwrite files."
+            : "Update installed successfully.";
           fromVer.textContent = `v${res.current || info?.current || "—"}`;
           toVer.textContent = `→ v${res.latest}`;
           if (res.notes) changelog.innerHTML = mdToHtml(res.notes);
           actionBtn.disabled = false;
-          actionBtn.textContent = "Restart";
+          actionBtn.textContent = "Restart & Finish";
           laterBtn.disabled = false;
           laterBtn.textContent = "Close";
           actionBtn.onclick = () => window.stormpowerUpdate.restart();
