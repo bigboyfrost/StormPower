@@ -21,6 +21,7 @@ const {
   iconPath,
   readAppVersion,
   projectRoot,
+  cleanupLeftoverInstallers,
 } = require("./paths");
 
 const PORT = 21773;
@@ -31,6 +32,8 @@ const TOGGLE_H = 64;
 const UPDATE_W = 720;
 const UPDATE_H = 640;
 const UPDATE_UI_ONLY = process.argv.includes("--update-ui");
+const UPDATE_POLL_MS = 15 * 60 * 1000; // re-check while running
+const UPDATE_THROTTLE_MS = 60 * 1000;
 
 let mainWindow = null;
 let toggleWindow = null;
@@ -41,6 +44,7 @@ const commandQueue = [];
 let lastStatus = { connected: false, lastPoll: 0 };
 let detached = false;
 let cachedUpdateInfo = null;
+let lastUpdateCheckAt = 0;
 
 let menu = null;
 
@@ -192,8 +196,24 @@ function setDetached(on) {
 function onMenuChange(snap) {
   sendMain("menu-state", snap);
   sendToggle("menu-state", { open: snap.open });
-  if (snap.open) showMainWindow();
-  else hideMainWindow();
+  if (snap.open) {
+    showMainWindow();
+    // Quiet background check whenever the menu is opened (throttled)
+    pollForUpdates("menu");
+  } else hideMainWindow();
+}
+
+async function pollForUpdates(reason = "poll") {
+  const now = Date.now();
+  if (reason !== "startup" && now - lastUpdateCheckAt < UPDATE_THROTTLE_MS) return;
+  lastUpdateCheckAt = now;
+  try {
+    const info = await appUpdater.checkForUpdates({ silent: true });
+    cachedUpdateInfo = info;
+    if (info?.updateAvailable) sendMain("update-available", info);
+  } catch (err) {
+    console.error("[StormPower] update check failed:", err?.message || err);
+  }
 }
 
 function showMainWindow() {
@@ -475,6 +495,7 @@ app.whenReady().then(async () => {
   }
 
   syncStormworksAddon();
+  cleanupLeftoverInstallers();
 
   menu = createMenuEngine({
     enqueue,
@@ -514,11 +535,11 @@ app.whenReady().then(async () => {
 
   menu.setOpen(true);
 
-  try {
-    const info = await appUpdater.checkForUpdates({ silent: true });
-    cachedUpdateInfo = info;
-    if (info?.updateAvailable) sendMain("update-available", info);
-  } catch (_) {}
+  await pollForUpdates("startup");
+  setInterval(() => {
+    pollForUpdates("interval");
+    cleanupLeftoverInstallers();
+  }, UPDATE_POLL_MS);
 
   console.log("[StormPower] ready — Aimless Developement");
   console.log("[StormPower] Windowed: floating UI + edge toggle button.");

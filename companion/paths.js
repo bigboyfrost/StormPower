@@ -85,6 +85,41 @@ function readAppVersion() {
   }
 }
 
+/** Remove leftover StormPower-Setup*.exe (and similar) from Desktop folders. */
+function cleanupLeftoverInstallers() {
+  const dirs = [];
+  try {
+    dirs.push(app.getPath("desktop"));
+  } catch (_) {}
+  try {
+    dirs.push(path.join(app.getPath("home"), "Desktop"));
+  } catch (_) {}
+  try {
+    dirs.push(path.join(app.getPath("home"), "OneDrive", "Desktop"));
+  } catch (_) {}
+  if (process.env.PUBLIC) {
+    dirs.push(path.join(process.env.PUBLIC, "Desktop"));
+  }
+
+  let removed = 0;
+  for (const dir of dirs) {
+    try {
+      if (!dir || !fs.existsSync(dir)) continue;
+      for (const name of fs.readdirSync(dir)) {
+        if (!/^StormPower-Setup/i.test(name) && !/^StormPower Setup\.(lnk|exe)$/i.test(name)) {
+          continue;
+        }
+        try {
+          fs.unlinkSync(path.join(dir, name));
+          removed += 1;
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+  if (removed) console.log(`[StormPower] cleaned ${removed} leftover installer file(s)`);
+  return removed;
+}
+
 module.exports = {
   isPackaged,
   projectRoot,
@@ -94,4 +129,5 @@ module.exports = {
   userSettingsPath,
   syncStormworksAddon,
   readAppVersion,
+  cleanupLeftoverInstallers,
 };

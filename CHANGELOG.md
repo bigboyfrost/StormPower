@@ -1,5 +1,10 @@
 ﻿# StormPower Changelog
 
+## 1.5.3
+- Check for updates while StormPower is running (menu open + every 15 min)
+- Release notes formatting fixed (markdown renders again)
+- Leftover StormPower-Setup.exe on the desktop is cleaned up after install/update
+
 ## 1.5.2
 - Rewrite Vehicle Boost: moves the whole ship group, horizontal only, pulsed — no more vibrate/glitch/break
 

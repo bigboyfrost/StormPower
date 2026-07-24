@@ -306,39 +306,71 @@
     }
 
     function mdToHtml(md) {
-      const lines = String(md || "").replace(/\r\n/g, "\n").split("\n");
+      const lines = String(md || "")
+        .replace(/^\uFEFF/, "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .split("\n");
       let html = "";
       let inList = false;
       const flushList = () => {
         if (inList) { html += "</ul>"; inList = false; }
       };
+      const inline = (s) =>
+        escapeHtml(s)
+          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+          .replace(/`([^`]+)`/g, "<code>$1</code>");
+
       for (const raw of lines) {
         const line = raw.trimEnd();
-        if (!line.trim()) { flushList(); continue; }
-        if (/^##\s+/.test(line)) {
+        const trimmed = line.trim();
+        if (!trimmed) { flushList(); continue; }
+
+        // Already-escaped accidental HTML lines — skip empty artifacts
+        if (/^&lt;/.test(trimmed)) {
           flushList();
-          html += `<h2>${escapeHtml(line.replace(/^##\s+/, ""))}</h2>`;
           continue;
         }
-        if (/^###\s+/.test(line)) {
+
+        if (/^###\s+/.test(trimmed)) {
           flushList();
-          html += `<h3>${escapeHtml(line.replace(/^###\s+/, ""))}</h3>`;
+          html += `<h3>${inline(trimmed.replace(/^###\s+/, ""))}</h3>`;
           continue;
         }
-        if (/^[-*]\s+/.test(line)) {
+        if (/^##\s+/.test(trimmed)) {
+          flushList();
+          html += `<h2>${inline(trimmed.replace(/^##\s+/, ""))}</h2>`;
+          continue;
+        }
+        if (/^#\s+/.test(trimmed)) {
+          flushList();
+          html += `<h2>${inline(trimmed.replace(/^#\s+/, ""))}</h2>`;
+          continue;
+        }
+        if (/^[-*•]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed)) {
           if (!inList) { html += "<ul>"; inList = true; }
-          let item = escapeHtml(line.replace(/^[-*]\s+/, ""));
-          item = item.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-          html += `<li>${item}</li>`;
+          html += `<li>${inline(trimmed.replace(/^([-*•]|\d+\.)\s+/, ""))}</li>`;
           continue;
         }
         flushList();
-        let p = escapeHtml(line);
-        p = p.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-        html += `<p>${p}</p>`;
+        html += `<p>${inline(trimmed)}</p>`;
       }
       flushList();
       return html || "<p>No changelog notes for this release.</p>";
+    }
+
+    function renderNotes(notes) {
+      const raw = String(notes || "").replace(/^\uFEFF/, "").trim();
+      if (!raw) {
+        changelog.innerHTML = "<p>No changelog notes for this release.</p>";
+        return;
+      }
+      // If upstream already sent HTML, render it (strip scripts only)
+      if (/<\/?[a-z][\s\S]*>/i.test(raw) && !/^#/m.test(raw)) {
+        changelog.innerHTML = raw.replace(/<script[\s\S]*?<\/script>/gi, "");
+        return;
+      }
+      changelog.innerHTML = mdToHtml(raw);
     }
 
     function renderInfo(data) {
@@ -349,7 +381,7 @@
         : `v${info.latest || info.current || "—"}`;
 
       const notes = info.notes || info.changelog || "";
-      changelog.innerHTML = mdToHtml(notes);
+      renderNotes(notes);
 
       if (info.updateAvailable) {
         phase = "ready";
@@ -423,7 +455,7 @@
             : "Update installed successfully.";
           fromVer.textContent = `v${res.current || info?.current || "—"}`;
           toVer.textContent = `→ v${res.latest}`;
-          if (res.notes) changelog.innerHTML = mdToHtml(res.notes);
+          if (res.notes) renderNotes(res.notes);
           actionBtn.disabled = false;
           actionBtn.textContent = "Restart & Finish";
           laterBtn.disabled = false;
