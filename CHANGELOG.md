@@ -1,5 +1,10 @@
 ﻿# StormPower Changelog
 
+## 1.4.6
+- Fix update download HTTP 415 (wrong Accept header on GitHub zip)
+- Prefer release zip / tag archive instead of API zipball
+- emergency-update.bat if auto-update is stuck
+
 ## 1.4.5
 - iPhone-style toggles instead of separate On/Off buttons
 - Menu keeps keyboard focus so arrow keys work without rapid clicking

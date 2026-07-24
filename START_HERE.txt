@@ -19,6 +19,7 @@ Install (one time)
 Update later
   • Double-click  update.bat
   • A changelog screen opens — click Update Now
+  • If update fails (e.g. HTTP 415), run  emergency-update.bat
   • Repo is already set to:
       https://github.com/bigboyfrost/StormPower
 

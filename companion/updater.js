@@ -118,12 +118,20 @@ function httpsGetJson(url) {
 function downloadFile(url, dest, redirectsLeft = 8) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith("http://") ? http : https;
+    // api.github.com zipball rejects Accept: application/octet-stream (HTTP 415).
+    // Release asset URLs want octet-stream. Everything else: */*
+    let accept = "*/*";
+    if (/github\.com\/.*\/releases\/download\//i.test(url)) {
+      accept = "application/octet-stream";
+    } else if (/api\.github\.com/i.test(url)) {
+      accept = "application/vnd.github+json";
+    }
     const req = mod.get(
       url,
       {
         headers: {
           "User-Agent": "StormPower-Updater",
-          Accept: "application/octet-stream",
+          Accept: accept,
         },
       },
       (res) => {
@@ -366,25 +374,30 @@ async function checkForUpdates({ silent = true, apply = false, onProgress } = {}
   let notes = "";
 
   try {
-    progress("Fetching latest release…");
+    progress("Fetching latest release...");
     const release = await httpsGetJson(
       `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/releases/latest`
     );
     latest = (release.tag_name || release.name || current).replace(/^v/i, "");
     htmlUrl = release.html_url || "";
     notes = String(release.body || "").trim();
-    // Prefer GitHub source zipball for auto-updates — always nested as
-    // owner-repo-hash/VERSION+companion (old buggy finders also work).
-    // Manual friend packs are separate release assets with a different name.
-    zipUrl =
-      release.zipball_url ||
-      (release.assets || []).find((a) => /friends-install.*\.zip$/i.test(a.name))
-        ?.browser_download_url ||
-      (release.assets || []).find((a) => /\.zip$/i.test(a.name))?.browser_download_url ||
+
+    const assets = release.assets || [];
+    const assetUrl =
+      assets.find((a) => /stormpower-v.*\.zip$/i.test(a.name))?.browser_download_url ||
+      assets.find((a) => /stormpower.*friends.*\.zip$/i.test(a.name))?.browser_download_url ||
+      assets.find((a) => /friends-install.*\.zip$/i.test(a.name))?.browser_download_url ||
+      assets.find((a) => /\.zip$/i.test(a.name))?.browser_download_url ||
       "";
+
+    // Prefer:
+    // 1) Release zip asset (works with Accept octet-stream)
+    // 2) github.com tag archive (NOT api.github.com zipball — that 415s with octet-stream)
+    const tagArchive = `https://github.com/${cfg.owner}/${cfg.repo}/archive/refs/tags/v${latest}.zip`;
+    zipUrl = assetUrl || tagArchive;
   } catch (_) {
     try {
-      progress("Reading VERSION from branch…");
+      progress("Reading VERSION from branch...");
       const raw = await new Promise((resolve, reject) => {
         https
           .get(
@@ -433,17 +446,17 @@ async function checkForUpdates({ silent = true, apply = false, onProgress } = {}
 
   const tmpZip = path.join(ROOT, "_update.zip");
   const tmpDir = path.join(ROOT, "_update_extract");
-  progress(`Downloading v${latest}…`);
+  progress(`Downloading v${latest}...`);
   await downloadFile(zipUrl, tmpZip);
   assertZipFile(tmpZip);
 
-  progress("Extracting update…");
+  progress("Extracting update...");
   extractZip(tmpZip, tmpDir);
   const srcRoot = findUpdateRoot(tmpDir);
   log(`Update root detected: ${srcRoot}`);
 
   // Stage a clean copy so finish-update can install after Electron exits
-  progress("Staging update (will install on restart)…");
+  progress("Staging update (will install on restart)...");
   if (fs.existsSync(STAGING_DIR)) fs.rmSync(STAGING_DIR, { recursive: true, force: true });
   fs.mkdirSync(STAGING_DIR, { recursive: true });
   const stageErrors = copyUpdate(srcRoot, STAGING_DIR);

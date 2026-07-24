@@ -6,11 +6,14 @@ if (-not $root) { $root = Join-Path $env:USERPROFILE "Documents\StormPower" }
 $ver = (Get-Content -LiteralPath (Join-Path $root "VERSION") -Raw).Trim()
 $outDir = Join-Path $root "dist"
 $stage = Join-Path $env:TEMP "StormPower-pack-$ver"
-# Discord/share name + GitHub asset name (must NOT match old updater's stormpower.*.zip preference)
+# Discord/share name + GitHub assets
+# StormPower-vX.zip is picked up by older updaters (stormpower.*.zip match)
 $zipName = "StormPower-v$ver-friends.zip"
-$ghAssetName = "Friends-Install-v$ver.zip"
+$ghAssetName = "StormPower-v$ver.zip"
+$ghAssetAlt = "Friends-Install-v$ver.zip"
 $zipPath = Join-Path $outDir $zipName
 $ghAssetPath = Join-Path $outDir $ghAssetName
+$ghAssetAltPath = Join-Path $outDir $ghAssetAlt
 $desktopZip = Join-Path ([Environment]::GetFolderPath("Desktop")) $zipName
 
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
@@ -23,6 +26,8 @@ $include = @(
   "install.bat",
   "start.bat",
   "update.bat",
+  "emergency-update.bat",
+  "emergency-update.ps1",
   "pack.bat",
   "pack-release.ps1",
   "package.json",
@@ -68,6 +73,7 @@ if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force 
 Compress-Archive -Path (Join-Path $nested "StormPower") -DestinationPath $zipPath -Force
 Copy-Item -LiteralPath $zipPath -Destination $desktopZip -Force
 Copy-Item -LiteralPath $zipPath -Destination $ghAssetPath -Force
+Copy-Item -LiteralPath $zipPath -Destination $ghAssetAltPath -Force
 
 Remove-Item -LiteralPath $stage -Recurse -Force
 Remove-Item -LiteralPath $nested -Recurse -Force
@@ -78,5 +84,6 @@ Write-Host "Friend zip ready:"
 Write-Host "  $zipPath"
 Write-Host "  $desktopZip"
 Write-Host "  GitHub asset: $ghAssetPath"
+Write-Host "  Alt asset: $ghAssetAltPath"
 Write-Host "  Size: $size KB"
 Write-Host ""
