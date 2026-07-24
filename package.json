@@ -1,23 +1,91 @@
-﻿{
-    "name": "stormpower",
+{
+  "name": "stormpower",
+  "productName": "StormPower",
+  "version": "1.5.0",
+  "description": "StormPower - external spawn overlay for Stormworks. By Aimless Developement.",
+  "author": "Aimless Developement",
+  "license": "MIT",
+  "main": "companion/main.js",
+  "scripts": {
+    "start": "electron .",
+    "update": "electron . --update-ui",
+    "dist": "electron-builder --win nsis",
+    "publish": "electron-builder --win nsis --publish always",
+    "make-icon": "node scripts/make-icon.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bigboyfrost/StormPower.git"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9",
+    "express": "^4.21.2",
+    "node-global-key-listener": "^0.3.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^2.1.8"
+  },
+  "build": {
+    "appId": "com.aimless.stormpower",
     "productName": "StormPower",
-    "version": "1.4.6",
-    "description": "StormPower Ã¢â‚¬â€ external spawn overlay for Stormworks. By Aimless Developement.",
-    "author": "Aimless Developement",
-    "license": "MIT",
-    "main": "companion/main.js",
-    "scripts": {
-        "start": "electron .",
-        "update": "electron . --update-ui"
+    "copyright": "Copyright Aimless Developement",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
     },
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/bigboyfrost/StormPower.git"
+    "files": [
+      "companion/**/*",
+      "VERSION",
+      "CHANGELOG.md",
+      "update-config.json",
+      "package.json",
+      "!companion/user-settings.json",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "addon",
+        "to": "addon",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "StormPower-Setup-${version}.${ext}",
+      "signAndEditExecutable": false,
+      "signDlls": false
     },
-    "dependencies": {
-        "electron": "^33.2.0",
-        "express": "^4.21.2",
-        "node-global-key-listener": "^0.3.0"
-    }
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "StormPower",
+      "uninstallDisplayName": "StormPower",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "bigboyfrost",
+        "repo": "StormPower"
+      }
+    ]
+  }
 }
-

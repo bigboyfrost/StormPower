@@ -1,4 +1,10 @@
-﻿# StormPower Changelog
+# StormPower Changelog
+
+## 1.5.0
+- Real Windows installer (StormPower-Setup.exe) with desktop shortcut
+- Auto-updates via GitHub Releases (electron-updater) — no Node.js required
+- Temporary stock lightning icon (replace build/icon.png later)
+- Stormworks addon syncs automatically on launch
 
 ## 1.4.6
 - Fix update download HTTP 415 (wrong Accept header on GitHub zip)

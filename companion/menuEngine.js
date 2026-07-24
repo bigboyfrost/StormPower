@@ -4,8 +4,15 @@
  */
 const fs = require("fs");
 const path = require("path");
+const { userSettingsPath } = require("./paths");
 
-const SETTINGS_PATH = path.join(__dirname, "user-settings.json");
+function settingsFile() {
+  try {
+    return userSettingsPath();
+  } catch (_) {
+    return path.join(__dirname, "user-settings.json");
+  }
+}
 
 const defaultSettings = {
   side: "left",
@@ -17,7 +24,7 @@ const defaultSettings = {
 
 function loadSettings() {
   try {
-    return { ...defaultSettings, ...JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8")) };
+    return { ...defaultSettings, ...JSON.parse(fs.readFileSync(settingsFile(), "utf8")) };
   } catch (_) {
     return { ...defaultSettings };
   }
@@ -25,7 +32,9 @@ function loadSettings() {
 
 function saveSettings(s) {
   try {
-    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(s, null, 2), "utf8");
+    const file = settingsFile();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(s, null, 2), "utf8");
   } catch (_) {}
 }
 

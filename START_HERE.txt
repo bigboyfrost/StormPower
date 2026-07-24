@@ -1,34 +1,43 @@
 ============================================
   StormPower  ·  Aimless Developement
-  Friend pack — START HERE
+  Windows installer — START HERE
 ============================================
 
 What you need
   • Windows PC
   • Stormworks: Build and Rescue
-  • Node.js LTS  →  https://nodejs.org/
 
-Install (one time)
-  1. Unzip this folder anywhere (Desktop is fine)
-  2. Double-click  install.bat
-  3. Double-click  start.bat
-  4. In Stormworks, enable the "StormPower" addon on your save
+Install (friends)
+  1. Download StormPower-Setup-*.exe from:
+       https://github.com/bigboyfrost/StormPower/releases/latest
+  2. Run the installer (desktop shortcut is created automatically)
+  3. Launch StormPower from the desktop shortcut
+  4. In Stormworks: enable the "StormPower" addon on your save
   5. Reload the world (or type ?reload_scripts in chat)
   6. Click the floating SP button
 
-Update later
-  • Double-click  update.bat
-  • A changelog screen opens — click Update Now
-  • If update fails (e.g. HTTP 415), run  emergency-update.bat
-  • Repo is already set to:
-      https://github.com/bigboyfrost/StormPower
+Updates
+  • StormPower checks GitHub for updates automatically
+  • Use the in-app Update screen when a new version is available
+  • No Node.js and no zip folders required
+
+If Windows SmartScreen warns
+  • Click More info → Run anyway (unsigned build until a cert is added)
+
+Dev / source folder (optional)
+  • Node.js LTS → https://nodejs.org/
+  • install.bat then start.bat
 
 Tips
   • Use Borderless Window in Stormworks so the overlay shows
   • Exclusive fullscreen hides external windows — use chat (?sp)
   • Spawn distance slider controls how far things / tsunamis appear
 
-Support / source
+Icon
+  • Temporary stock icon ships in build/icon.ico
+  • Drop your final art as build/icon.png and rebuild the installer
+
+Support / repo
   https://github.com/bigboyfrost/StormPower
 
 MIT © Aimless Developement

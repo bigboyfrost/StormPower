@@ -3,19 +3,25 @@
 
 External spawn menu for *Stormworks: Build and Rescue*.
 
-## Friend pack — quick start
+## Install (recommended)
 
-1. Install [Node.js LTS](https://nodejs.org/)
-2. Run **`install.bat`**
-3. Run **`start.bat`**
+1. Download **StormPower-Setup-*.exe** from [Releases](https://github.com/bigboyfrost/StormPower/releases/latest)
+2. Run the installer (creates a desktop shortcut)
+3. Launch **StormPower**
 4. Enable addon **StormPower** in your Stormworks save
 5. Click the floating **SP** button
 
-Updates are preconfigured for this repo:
+Updates install automatically from GitHub Releases — no Node.js required.
 
-`https://github.com/bigboyfrost/StormPower`
+> Windows SmartScreen may warn on unsigned builds: **More info → Run anyway**.
 
-Run **`update.bat`** anytime — a changelog screen appears.
+## Dev / source folder
+
+1. Install [Node.js LTS](https://nodejs.org/)
+2. Run **`install.bat`** then **`start.bat`**
+3. Build installer: `npm run dist`
+
+Custom icon: replace `build/icon.png`, run `node scripts/make-icon.js`, then rebuild.
 
 ## Features
 
@@ -38,14 +44,6 @@ Run **`update.bat`** anytime — a changelog screen appears.
 | `?waves calm\|choppy\|max\|mega\|ultra\|off` | `?waves ultra` |
 | `?sirens off\|on\|kill` | `?sirens off` |
 | `?boom [0-1] [dist]` | `?boom 0.8 20` |
-| `?give pistol\|smg\|rifle\|…` | `?give rifle` |
-| `?loadout` `?heal` `?money` `?cleanup` | |
-
-## Tips
-
-- Prefer **Borderless Window** so the overlay is visible
-- Exclusive fullscreen: use chat commands instead
-- Set spawn distance before mega/ultra waves so they land ahead of you
 
 ## License
 

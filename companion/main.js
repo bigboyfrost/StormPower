@@ -9,12 +9,19 @@ const {
   nativeImage,
 } = require("electron");
 const path = require("path");
-const fs = require("fs");
 const express = require("express");
 const http = require("http");
 const { spawn } = require("child_process");
-const { checkForUpdates, spawnFinishUpdate } = require("./updater");
+const appUpdater = require("./appUpdater");
+const { checkForUpdates: checkZipUpdates, spawnFinishUpdate } = require("./updater");
 const { createMenuEngine } = require("./menuEngine");
+const {
+  isPackaged,
+  syncStormworksAddon,
+  iconPath,
+  readAppVersion,
+  projectRoot,
+} = require("./paths");
 
 const PORT = 21773;
 const WIN_W = 622;
@@ -117,13 +124,17 @@ function openUpdateScreen(info) {
 }
 
 function relaunchStormPower() {
+  if (isPackaged()) {
+    app.relaunch();
+    setTimeout(() => app.quit(), 200);
+    return;
+  }
   // Finish installs AFTER this process exits (file locks on Windows)
   try {
     spawnFinishUpdate({ relaunch: true });
   } catch (err) {
     console.error("[StormPower] finish-update spawn failed", err);
-    // Fallback: try direct relaunch
-    const root = path.resolve(__dirname, "..");
+    const root = projectRoot();
     const child = spawn(process.execPath, [root], {
       cwd: root,
       detached: true,
@@ -343,9 +354,21 @@ function createToggleWindow() {
 }
 
 function createTray() {
-  const img = nativeImage.createFromDataURL(
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGD4z0ABYBzVMKoBAw0M/kP4jGQbQJYGkhWQZQDlBqB7gFEOYBoAAGmWAxXQvYJvAAAAAElFTkSuQmCC"
-  );
+  let img = nativeImage.createEmpty();
+  const ico = iconPath();
+  if (ico) {
+    try {
+      img = nativeImage.createFromPath(ico);
+      if (!img.isEmpty() && (img.getSize().width > 16 || img.getSize().height > 16)) {
+        img = img.resize({ width: 16, height: 16 });
+      }
+    } catch (_) {}
+  }
+  if (img.isEmpty()) {
+    img = nativeImage.createFromDataURL(
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGD4z0ABYBzVMKoBAw0M/kP4jGQbQJYGkhWQZQDlBqB7gFEOYBoAAGmWAxXQvYJvAAAAAElFTkSuQmCC"
+    );
+  }
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img);
   tray.setToolTip("StormPower");
   tray.setContextMenu(
@@ -451,6 +474,8 @@ app.whenReady().then(async () => {
     return;
   }
 
+  syncStormworksAddon();
+
   menu = createMenuEngine({
     enqueue,
     onChange: onMenuChange,
@@ -490,7 +515,7 @@ app.whenReady().then(async () => {
   menu.setOpen(true);
 
   try {
-    const info = await checkForUpdates({ silent: true });
+    const info = await appUpdater.checkForUpdates({ silent: true });
     cachedUpdateInfo = info;
     if (info?.updateAvailable) sendMain("update-available", info);
   } catch (_) {}
@@ -534,7 +559,7 @@ ipcMain.on("back", () => menu && menu.handleNav("back"));
 ipcMain.on("set-detached", (_e, on) => setDetached(!!on));
 ipcMain.on("queue-command", (_e, line) => enqueue(line));
 ipcMain.handle("check-updates", async () => {
-  cachedUpdateInfo = await checkForUpdates({ silent: false });
+  cachedUpdateInfo = await appUpdater.checkForUpdates({ silent: false });
   return cachedUpdateInfo;
 });
 ipcMain.handle("apply-update", async () => {
@@ -543,21 +568,38 @@ ipcMain.handle("apply-update", async () => {
   return { openedUi: true, ...(cachedUpdateInfo || {}) };
 });
 ipcMain.handle("open-update-ui", async () => {
-  const info = cachedUpdateInfo || (await checkForUpdates({ silent: true }));
+  const info = cachedUpdateInfo || (await appUpdater.checkForUpdates({ silent: true }));
   cachedUpdateInfo = info;
   openUpdateScreen(info);
   return info;
 });
 ipcMain.handle("update-ui-info", async () => {
   if (cachedUpdateInfo) return cachedUpdateInfo;
-  cachedUpdateInfo = await checkForUpdates({ silent: false });
+  cachedUpdateInfo = await appUpdater.checkForUpdates({ silent: false });
   return cachedUpdateInfo;
 });
 ipcMain.handle("update-ui-apply", async () => {
-  // Close StormPower FIRST, then install (Windows locks files while open)
-  const root = path.resolve(__dirname, "..");
+  const progress = (message) => {
+    const msg = typeof message === "string" ? message : message?.message || "";
+    sendUpdate("update-progress", { message: msg });
+  };
+
+  if (isPackaged()) {
+    try {
+      appUpdater.setProgressHandler(progress);
+      const result = await appUpdater.downloadAndInstall(progress);
+      return result;
+    } catch (err) {
+      console.error("[StormPower] packaged update failed", err);
+      return { applied: false, message: String(err.message || err) };
+    }
+  }
+
+  // Loose/dev folder install: stage zip then quit for finish-update
+  const root = projectRoot();
   const script = path.join(__dirname, "run-update-and-relaunch.js");
   try {
+    await checkZipUpdates({ silent: false, apply: true, onProgress: progress });
     const child = spawn("node.exe", [script], {
       cwd: root,
       detached: true,
@@ -574,7 +616,7 @@ ipcMain.handle("update-ui-apply", async () => {
   return {
     applied: true,
     closing: true,
-    message: "Closing StormPower to install the update…",
+    message: "Closing StormPower to install the update...",
   };
 });
 ipcMain.on("update-ui-close", () => {
@@ -582,8 +624,16 @@ ipcMain.on("update-ui-close", () => {
   else if (UPDATE_UI_ONLY) app.quit();
 });
 ipcMain.on("update-ui-restart", () => {
-  // Same quit-then-install path
-  const root = path.resolve(__dirname, "..");
+  if (isPackaged()) {
+    appUpdater
+      .downloadAndInstall((message) => {
+        const msg = typeof message === "string" ? message : message?.message || "";
+        sendUpdate("update-progress", { message: msg });
+      })
+      .catch((err) => console.error("[StormPower] restart-update failed", err));
+    return;
+  }
+  const root = projectRoot();
   const script = path.join(__dirname, "run-update-and-relaunch.js");
   try {
     const child = spawn("node.exe", [script], {
@@ -598,9 +648,5 @@ ipcMain.on("update-ui-restart", () => {
 });
 
 function readVersion() {
-  try {
-    return fs.readFileSync(path.join(app.getAppPath(), "VERSION"), "utf8").trim();
-  } catch (_) {
-    return app.getVersion();
-  }
+  return readAppVersion();
 }
