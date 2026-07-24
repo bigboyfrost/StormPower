@@ -1,4 +1,5 @@
 (() => {
+  const shell = document.getElementById("shell");
   const listEl = document.getElementById("list");
   const pathEl = document.getElementById("path");
   const linkStatus = document.getElementById("linkStatus");
@@ -7,6 +8,7 @@
   const updateText = document.getElementById("updateText");
   const updateBtn = document.getElementById("updateBtn");
   const backBtn = document.getElementById("backBtn");
+  const popOutBtn = document.getElementById("popOutBtn");
   const lastAction = document.getElementById("lastAction");
   const peerEl = document.getElementById("peer");
   const countEl = document.getElementById("count");
@@ -21,6 +23,7 @@
 
   let applying = false;
   let flashUntil = 0;
+  let detached = false;
 
   function sizeFromSlider() {
     return Number(sizeEl.value) / 2;
@@ -43,6 +46,13 @@
     });
   }
 
+  function setDetachedUi(on) {
+    detached = !!on;
+    shell.classList.toggle("detached", detached);
+    popOutBtn.textContent = detached ? "Dock" : "Pop out";
+    popOutBtn.classList.toggle("active", detached);
+  }
+
   [peerEl, countEl, sizeEl, distEl].forEach((el) => {
     el.addEventListener("input", () => {
       syncLabels();
@@ -58,6 +68,7 @@
   });
 
   backBtn.addEventListener("click", () => window.stormpower?.back());
+  popOutBtn.addEventListener("click", () => window.stormpower?.setDetached(!detached));
 
   function render(state) {
     if (!state) return;
@@ -113,9 +124,11 @@
       updateBanner.classList.remove("hidden");
       updateText.textContent = `Update ${info.latest} available`;
     });
+    window.stormpower.onDetach((s) => setDetachedUi(!!s?.detached));
     window.stormpower.getConfig().then((cfg) => {
       versionPill.textContent = `v${cfg.version || "—"}`;
       if (cfg.state) render(cfg.state);
+      setDetachedUi(!!cfg.detached);
     });
     updateBtn.addEventListener("click", async () => {
       updateText.textContent = "Updating…";
@@ -124,7 +137,6 @@
     });
   }
 
-  // Local key fallback if window has focus
   window.addEventListener("keydown", (e) => {
     const map = {
       ArrowUp: "up",

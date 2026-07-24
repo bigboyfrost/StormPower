@@ -7,6 +7,11 @@
 </head>
 <body>
   <div id="shell" class="shell">
+    <div class="drag-bar" title="Drag to move">
+      <span class="drag-title">StormPower</span>
+      <span class="drag-hint">Drag onto another monitor</span>
+    </div>
+
     <header class="hero">
       <div class="hero-text">
         <p class="eyebrow">Aimless Developement</p>
@@ -28,7 +33,7 @@
             <strong id="distValue">20 m</strong>
           </div>
           <input id="dist" type="range" min="1" max="5000" value="20" />
-          <p class="hint">How far in front of you things appear (1–5000 m)</p>
+          <p class="hint">How far in front of you things appear (1–5000 m). Tsunamis use this too.</p>
         </div>
         <div class="row2">
           <div class="control">
@@ -69,6 +74,9 @@
       <div class="menu-toolbar">
         <button type="button" id="backBtn" class="back-btn">‹ Back</button>
         <div class="breadcrumb" id="path">Home</div>
+        <div class="toolbar-actions">
+          <button type="button" id="popOutBtn" class="tool-btn" title="Detach and drag to another monitor">Pop out</button>
+        </div>
       </div>
       <ul id="list" class="list"></ul>
       <div id="lastAction" class="last-action"></div>
@@ -85,8 +93,9 @@
         <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
         <span><kbd>↵</kbd> select</span>
         <span><kbd>⌫</kbd> back</span>
+        <span>Pop out → drag to 2nd screen</span>
       </div>
-      <p class="credit">StormPower · Aimless Developement · fullscreen uses in-game HUD</p>
+      <p class="credit">StormPower · Aimless Developement</p>
     </footer>
   </div>
   <script src="app.js"></script>

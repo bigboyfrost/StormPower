@@ -27,6 +27,7 @@ let tray = null;
 let keyListener = null;
 const commandQueue = [];
 let lastStatus = { connected: false, lastPoll: 0 };
+let detached = false;
 
 let menu = null;
 
@@ -53,19 +54,45 @@ function sendToggle(channel, payload) {
 function placeWindows(side) {
   const display = screen.getPrimaryDisplay().workArea;
   const isRight = side === "right";
-  // Always-on SP button at the very top corner
   const toggleX = isRight ? display.x + display.width - TOGGLE_W - 10 : display.x + 10;
   const toggleY = display.y + 8;
-  // Menu top-aligned, directly under the toggle so the button stays visible
   const mainX = isRight ? display.x + display.width - WIN_W - 16 : display.x + 16;
   const mainY = display.y + 8 + TOGGLE_H + 6;
 
-  if (mainWindow && !mainWindow.isDestroyed()) {
+  // When popped out, leave menu where the user dragged it (other monitor OK)
+  if (mainWindow && !mainWindow.isDestroyed() && !detached) {
     mainWindow.setBounds({ x: mainX, y: mainY, width: WIN_W, height: WIN_H });
   }
   if (toggleWindow && !toggleWindow.isDestroyed()) {
     toggleWindow.setBounds({ x: toggleX, y: toggleY, width: TOGGLE_W, height: TOGGLE_H });
   }
+}
+
+function setDetached(on) {
+  detached = !!on;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    sendMain("detach-state", { detached });
+    return;
+  }
+  if (detached) {
+    mainWindow.setAlwaysOnTop(false);
+    mainWindow.setVisibleOnAllWorkspaces(false);
+    mainWindow.setMovable(true);
+    mainWindow.setSkipTaskbar(false);
+    mainWindow.setFocusable(true);
+    // Nudge slightly so user sees it can move
+    const b = mainWindow.getBounds();
+    mainWindow.setBounds({ ...b, x: b.x + 24, y: b.y + 24 });
+    mainWindow.show();
+    mainWindow.focus();
+  } else {
+    mainWindow.setAlwaysOnTop(true, "screen-saver");
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    mainWindow.setMovable(true);
+    placeWindows(menu ? menu.settings.side : "left");
+    if (menu && menu.open) showMainWindow();
+  }
+  sendMain("detach-state", { detached });
 }
 
 function onMenuChange(snap) {
@@ -77,12 +104,15 @@ function onMenuChange(snap) {
 
 function showMainWindow() {
   if (!mainWindow) return;
-  placeWindows(menu.settings.side);
-  mainWindow.setAlwaysOnTop(true, "screen-saver");
-  // Allow mouse clicks on Back / list while open
+  if (!detached) placeWindows(menu.settings.side);
+  if (!detached) mainWindow.setAlwaysOnTop(true, "screen-saver");
   mainWindow.setFocusable(true);
-  mainWindow.showInactive();
-  mainWindow.moveTop();
+  if (detached) {
+    mainWindow.show();
+  } else {
+    mainWindow.showInactive();
+    mainWindow.moveTop();
+  }
 }
 
 function hideMainWindow() {
@@ -196,6 +226,7 @@ function createMainWindow() {
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
   mainWindow.on("will-resize", (e) => e.preventDefault());
+  mainWindow.setMovable(true);
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -387,6 +418,7 @@ ipcMain.handle("get-config", () => ({
   product: "StormPower",
   studio: "Aimless Developement",
   version: readVersion(),
+  detached,
   state: menu ? menu.getSnapshot() : null,
 }));
 
@@ -397,6 +429,7 @@ ipcMain.on("set-open", (_e, open) => menu && menu.setOpen(!!open));
 ipcMain.on("update-settings", (_e, partial) => menu && menu.updateSettings(partial || {}));
 ipcMain.on("activate-index", (_e, idx) => menu && menu.selectIndex(Number(idx)));
 ipcMain.on("back", () => menu && menu.handleNav("back"));
+ipcMain.on("set-detached", (_e, on) => setDetached(!!on));
 ipcMain.on("queue-command", (_e, line) => enqueue(line));
 ipcMain.handle("check-updates", async () => checkForUpdates({ silent: false }));
 ipcMain.handle("apply-update", async () => checkForUpdates({ silent: false, apply: true }));

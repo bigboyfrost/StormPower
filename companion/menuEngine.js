@@ -8,7 +8,7 @@ const path = require("path");
 const SETTINGS_PATH = path.join(__dirname, "user-settings.json");
 
 const defaultSettings = {
-  side: "left", // left | right
+  side: "left",
   peer: 0,
   count: 5,
   size: 1.0,
@@ -34,12 +34,13 @@ const MENU = {
     title: "Home",
     items: [
       { label: "Animals", sub: "Sharks, whales, krakens", goto: "animals" },
-      { label: "Creatures", sub: "Bears, wolves, zombies (DLC)", goto: "creatures" },
+      { label: "Creatures", sub: "Wildlife & monsters (DLC)", goto: "creatures" },
       { label: "Weapons & Ammo", sub: "Guns into your inventory", goto: "weapons" },
       { label: "Tools & Equipment", sub: "Meds, torches, radios", goto: "equipment" },
       { label: "Outfits", sub: "Suits and armor", goto: "outfits" },
       { label: "World Objects", sub: "Barrels, crates, props", goto: "objects" },
-      { label: "Weather & Waves", sub: "Sea state, massive waves, wind", goto: "weather" },
+      { label: "Explosions", sub: "Blasts around you (Weapons DLC)", goto: "explosions" },
+      { label: "Weather & Waves", sub: "Ultra wind, massive seas", goto: "weather" },
       { label: "Disasters", sub: "Tsunami, tornado, meteor…", goto: "disasters" },
       { label: "Player", sub: "Heal, money, loadout", goto: "player" },
       { label: "Game Rules", sub: "Fuel, damage, no-clip", goto: "rules" },
@@ -66,20 +67,31 @@ const MENU = {
     title: "Creatures",
     items: [
       { label: "Grizzly Bear", cmd: "spawn_creature", id: 1 },
+      { label: "Black Bear", cmd: "spawn_creature", id: 2 },
       { label: "Polar Bear", cmd: "spawn_creature", id: 3 },
       { label: "Plains Wolf", cmd: "spawn_creature", id: 63 },
       { label: "Arctic Wolf", cmd: "spawn_creature", id: 61 },
+      { label: "Mountain Lion", cmd: "spawn_creature", id: 100 },
+      { label: "Crocodile", cmd: "spawn_creature", id: 101 },
       { label: "Sasquatch", cmd: "spawn_creature", id: 12 },
       { label: "Yeti", cmd: "spawn_creature", id: 13 },
-      { label: "Crocodile", cmd: "spawn_creature", id: 101 },
-      { label: "Mountain Lion", cmd: "spawn_creature", id: 100 },
       { label: "Zombie (Male)", cmd: "spawn_creature", id: 64 },
       { label: "Zombie (Female)", cmd: "spawn_creature", id: 80 },
       { label: "German Shepherd", cmd: "spawn_creature", id: 25 },
       { label: "Husky", cmd: "spawn_creature", id: 32 },
-      { label: "Deer", cmd: "spawn_creature", id: 15 },
+      { label: "Labrador", cmd: "spawn_creature", id: 28 },
+      { label: "St Bernard", cmd: "spawn_creature", id: 33 },
+      { label: "Red Fox", cmd: "spawn_creature", id: 36 },
+      { label: "Arctic Fox", cmd: "spawn_creature", id: 37 },
+      { label: "Deer (Male)", cmd: "spawn_creature", id: 15 },
+      { label: "Cow (Holstein)", cmd: "spawn_creature", id: 11 },
+      { label: "Chicken", cmd: "spawn_creature", id: 4 },
       { label: "Penguin", cmd: "spawn_creature", id: 51 },
       { label: "Seal", cmd: "spawn_creature", id: 56 },
+      { label: "Badger", cmd: "spawn_creature", id: 0 },
+      { label: "Pig", cmd: "spawn_creature", id: 55 },
+      { label: "Buffalo", cmd: "spawn_creature", id: 97 },
+      { label: "Coyote", cmd: "spawn_creature", id: 102 },
     ],
   },
   weapons: {
@@ -94,6 +106,9 @@ const MENU = {
       { label: "Grenade", cmd: "give", id: 41, slot: 2, int: 3, float: 0 },
       { label: "C4 + Detonator", cmd: "c4_kit" },
       { label: "Speargun + Ammo", cmd: "spear_kit" },
+      { label: "Flare Gun + Ammo", cmd: "flare_kit" },
+      { label: "MG Ammo Box (HE)", cmd: "give", id: 43, slot: 2, int: 1, float: 0 },
+      { label: "Artillery Shell (HE)", cmd: "give", id: 68, slot: 2, int: 1, float: 0 },
       { label: "Full Combat Loadout", cmd: "loadout" },
     ],
   },
@@ -111,6 +126,18 @@ const MENU = {
       { label: "Oxygen Mask", cmd: "give", id: 18, slot: 2, int: 0, float: 100 },
       { label: "Radio", cmd: "give", id: 19, slot: 2, int: 1, float: 100 },
       { label: "Transponder", cmd: "give", id: 25, slot: 2, int: 1, float: 100 },
+      { label: "Compass", cmd: "give", id: 8, slot: 2, int: 0, float: 0 },
+      { label: "Flare", cmd: "give", id: 12, slot: 2, int: 4, float: 0 },
+      { label: "Strobe Light", cmd: "give", id: 23, slot: 2, int: 1, float: 100 },
+      { label: "Glowstick", cmd: "give", id: 72, slot: 2, int: 0, float: 0 },
+      { label: "Radiation Detector", cmd: "give", id: 30, slot: 2, int: 0, float: 100 },
+      { label: "Remote Control", cmd: "give", id: 21, slot: 2, int: 1, float: 100 },
+      { label: "Hose", cmd: "give", id: 16, slot: 1, int: 1, float: 0 },
+      { label: "Cable", cmd: "give", id: 7, slot: 2, int: 0, float: 0 },
+      { label: "Rope", cmd: "give", id: 22, slot: 2, int: 0, float: 0 },
+      { label: "Coal", cmd: "give", id: 28, slot: 2, int: 0, float: 0 },
+      { label: "Dog Whistle", cmd: "give", id: 73, slot: 2, int: 0, float: 0 },
+      { label: "Bomb Disposal", cmd: "give", id: 74, slot: 1, int: 0, float: 0 },
       { label: "Fishing Rod", cmd: "give", id: 81, slot: 1, int: 0, float: 0 },
     ],
   },
@@ -123,8 +150,10 @@ const MENU = {
       { label: "Parachute", cmd: "outfit", id: 4 },
       { label: "Arctic Suit", cmd: "outfit", id: 5 },
       { label: "Hazmat", cmd: "outfit", id: 29 },
-      { label: "Armor Vest", cmd: "outfit", id: 78 },
+      { label: "Chest Rig", cmd: "outfit", id: 75 },
+      { label: "Black Hawk Vest", cmd: "outfit", id: 76 },
       { label: "Plate Vest", cmd: "outfit", id: 77 },
+      { label: "Armor Vest", cmd: "outfit", id: 78 },
       { label: "Space Suit", cmd: "outfit", id: 79 },
       { label: "Exploration Suit", cmd: "outfit", id: 80 },
       { label: "Firefighter SCBA", cmd: "outfit", id: 149 },
@@ -141,19 +170,51 @@ const MENU = {
       { label: "Gas Canister", cmd: "spawn_object", id: 28 },
       { label: "Pallet", cmd: "spawn_object", id: 29 },
       { label: "Buoyancy Ring", cmd: "spawn_object", id: 26 },
+      { label: "Basketball", cmd: "spawn_object", id: 4 },
+      { label: "Television", cmd: "spawn_object", id: 5 },
+      { label: "Chair", cmd: "spawn_object", id: 9 },
+      { label: "Office Chair", cmd: "spawn_object", id: 13 },
+      { label: "Log", cmd: "spawn_object", id: 21 },
+      { label: "Bin", cmd: "spawn_object", id: 22 },
+      { label: "Fire Extinguisher", cmd: "spawn_object", id: 31 },
+      { label: "Tool Cart", cmd: "spawn_object", id: 32 },
+      { label: "Microwave", cmd: "spawn_object", id: 36 },
+      { label: "Box (Closed)", cmd: "spawn_object", id: 38 },
+      { label: "Coal Chunk", cmd: "spawn_object", id: 69 },
+      { label: "Meteorite", cmd: "spawn_object", id: 70 },
+      { label: "C4 Block", cmd: "spawn_object", id: 66 },
+      { label: "Grenade Prop", cmd: "spawn_object", id: 67 },
+      { label: "Glowstick Prop", cmd: "spawn_object", id: 71 },
+    ],
+  },
+  explosions: {
+    title: "Explosions",
+    items: [
+      { label: "Tiny Blast", sub: "Magnitude 0.15 ahead of you", cmd: "explode", mag: 0.15 },
+      { label: "Small Explosion", sub: "Magnitude 0.35", cmd: "explode", mag: 0.35 },
+      { label: "Medium Explosion", sub: "Magnitude 0.6", cmd: "explode", mag: 0.6 },
+      { label: "Large Explosion", sub: "Magnitude 0.85", cmd: "explode", mag: 0.85 },
+      { label: "Max Explosion", sub: "Magnitude 1.0 (Weapons DLC)", cmd: "explode", mag: 1 },
+      { label: "Ring of Blasts", sub: "6 explosions around you", cmd: "explode_ring", mag: 0.55 },
+      { label: "Fire Bomb (small)", sub: "Explosive fire size 3", cmd: "firebomb", size: 3, emag: 2 },
+      { label: "Fire Bomb (large)", sub: "Explosive fire size 8", cmd: "firebomb", size: 8, emag: 4 },
     ],
   },
   weather: {
     title: "Weather & Waves",
     items: [
       { label: "Clear / Calm Seas", sub: "No wind, flat water", cmd: "sea", mode: 0, wind: 0 },
-      { label: "Choppy Seas (worst ride)", sub: "Wind 0.72 — big + frequent waves", cmd: "sea", mode: 1, wind: 0.72 },
-      { label: "Max Weather Waves", sub: "Wind 1.0 — tallest stock waves (deep ocean)", cmd: "sea", mode: 1, wind: 1 },
-      { label: "MASSIVE WAVES", sub: "Rotating mega wave + max seas (1 at a time)", cmd: "sea", mode: 2, wind: 1 },
+      { label: "Choppy Seas", sub: "Wind 0.72", cmd: "sea", mode: 1, wind: 0.72 },
+      { label: "Max Weather Waves", sub: "Wind 1.0 — tallest stock waves", cmd: "sea", mode: 1, wind: 1 },
+      { label: "Ultra Wind x5", sub: "Pushes weather wind hard (visual/force)", cmd: "ultra_wind", wind: 5 },
+      { label: "Ultra Wind x10", sub: "Maximum ultra wind push", cmd: "ultra_wind", wind: 10 },
+      { label: "MASSIVE WAVES", sub: "Cancel+respawn tsunami loop @ spawn dist", cmd: "sea", mode: 2, wind: 1 },
+      { label: "ULTRA MASSIVE WAVES", sub: "Faster despawn/respawn + ultra wind", cmd: "sea", mode: 3, wind: 10 },
       { label: "Stop Massive Waves", sub: "Cancel wave events, calm wind", cmd: "sea", mode: 0, wind: 0 },
-      { label: "Spawn One Mega Wave", sub: "Single max tsunami near you", cmd: "mega_wave" },
-      { label: "Disable Disaster Sirens", sub: "Mute warning towers (recommended)", cmd: "sirens", mode: "off" },
-      { label: "Enable Disaster Sirens", sub: "Turn warning towers back on", cmd: "sirens", mode: "on" },
+      { label: "Spawn One Mega Wave", sub: "Uses spawn distance in front of you", cmd: "mega_wave" },
+      { label: "Disable Disaster Sirens", sub: "Force-mute warning towers", cmd: "sirens", mode: "off" },
+      { label: "Enable Disaster Sirens", sub: "Allow warning towers again", cmd: "sirens", mode: "on" },
+      { label: "Despawn Siren Towers", sub: "Remove towers entirely (nuclear option)", cmd: "sirens", mode: "kill" },
       { label: "Heavy Fog", cmd: "weather", fog: 1, rain: 0, wind: 0.2 },
       { label: "Heavy Rain + Wind", cmd: "weather", fog: 0.2, rain: 1, wind: 0.85 },
     ],
@@ -161,7 +222,7 @@ const MENU = {
   disasters: {
     title: "Disasters",
     items: [
-      { label: "Tsunami", cmd: "disaster", id: "tsunami" },
+      { label: "Tsunami", sub: "At spawn distance ahead", cmd: "disaster", id: "tsunami" },
       { label: "Whirlpool", cmd: "disaster", id: "whirlpool" },
       { label: "Tornado", cmd: "disaster", id: "tornado" },
       { label: "Meteor", cmd: "disaster", id: "meteor" },
@@ -226,21 +287,27 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
       case "spawn_object":
         return `spawn_object|${peer}|${item.id}|${count}|${dist}`;
       case "give":
-        return `give|${peer}|${item.id}|${item.slot}|${item.int}|${item.float}`;
+        return `give|${peer}|${item.id}|${item.slot}|${item.int}|${item.float}|${count}`;
       case "outfit":
         return `outfit|${peer}|${item.id}`;
       case "disaster":
-        return `disaster|${peer}|${item.id}|${Math.max(dist, 60)}`;
+        return `disaster|${peer}|${item.id}|${dist}`;
       case "weather":
         return `weather|${peer}|${item.fog}|${item.rain}|${item.wind}`;
       case "sea":
-        return `sea|${peer}|${item.mode}|${item.wind}`;
+        return `sea|${peer}|${item.mode}|${item.wind}|${dist}`;
+      case "ultra_wind":
+        return `ultra_wind|${peer}|${item.wind}`;
       case "mega_wave":
-        return `mega_wave|${peer}`;
+        return `mega_wave|${peer}|${dist}`;
       case "sirens":
         return `sirens|${peer}|${item.mode}`;
-      case "wind_boost":
-        return `wind_boost|${peer}|${item.wind}`;
+      case "explode":
+        return `explode|${peer}|${item.mag}|${dist}`;
+      case "explode_ring":
+        return `explode_ring|${peer}|${item.mag}|${dist}`;
+      case "firebomb":
+        return `firebomb|${peer}|${item.size}|${item.emag}|${dist}`;
       case "heal":
         return `heal|${peer}`;
       case "clear_inv":
@@ -251,6 +318,8 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
         return `c4_kit|${peer}`;
       case "spear_kit":
         return `spear_kit|${peer}`;
+      case "flare_kit":
+        return `flare_kit|${peer}`;
       case "money":
         return `money|${peer}`;
       case "cleanup":
@@ -321,7 +390,6 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
     else if (action === "select") activate();
     else if (action === "back") {
       if (!back() && typeof onChange === "function") {
-        // at root — close
         state.open = false;
         notify();
       }
@@ -367,7 +435,6 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
     };
   }
 
-  /** Compact text for Stormworks setPopupScreen (fullscreen-safe). */
   function getInGameText() {
     if (!state.open) {
       return "StormPower\n[F4] Open menu";
@@ -385,7 +452,6 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
     }
     if (snap.lastAction) lines.push(snap.lastAction);
     lines.push("[F4] close  [Bksp] back");
-    // Popup wraps ~13 chars; keep lines short-ish
     return lines.join("\n");
   }
 
