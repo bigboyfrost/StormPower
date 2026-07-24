@@ -247,7 +247,7 @@ const MENU = {
       },
       {
         label: "Vehicle Boost",
-        sub: "+40 knots while seated",
+        sub: "+40 kn forward (whole ship, seated)",
         toggle: "boost",
         cmd: "boost_toggle",
       },

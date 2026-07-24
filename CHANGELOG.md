@@ -1,5 +1,8 @@
 ﻿# StormPower Changelog
 
+## 1.5.2
+- Rewrite Vehicle Boost: moves the whole ship group, horizontal only, pulsed — no more vibrate/glitch/break
+
 ## 1.5.1
 - App shortcut keeps the lightning icon (was resetting to Electron)
 - Installer deletes itself a few seconds after a successful install

@@ -38,11 +38,16 @@ local chaos = {
 	step = 0,
 }
 
--- Vehicle boost: +40 knots (≈20.58 m/s). Applied as displacement per tick.
+-- Vehicle boost: adds forward speed while seated.
+-- IMPORTANT: must move the whole vehicle GROUP (not one body),
+-- only on the horizontal plane, and not every physics tick —
+-- otherwise ships vibrate, seats desync, and the game breaks.
 local boost = {
 	active = false,
 	peer = 0,
 	knots = 40,
+	accum = 0,
+	interval = 6, -- ~10 Hz pulses instead of 60 Hz teleports
 }
 
 local session = {
@@ -348,16 +353,88 @@ local function getSeatedVehicle(peer_id)
 	return nil
 end
 
+local function getVehicleGroupId(vehicle_id)
+	local data, ok = server.getVehicleData(vehicle_id)
+	if ok and data and data.group_id and data.group_id ~= 0 then
+		return data.group_id
+	end
+	return nil
+end
+
+local function primaryVehicleOf(vehicle_id)
+	local group_id = getVehicleGroupId(vehicle_id)
+	if not group_id or not server.getVehicleGroup then
+		return vehicle_id, group_id
+	end
+	local ids, ok = server.getVehicleGroup(group_id)
+	if not ok or not ids then
+		return vehicle_id, group_id
+	end
+	-- Prefer the lowest numeric id as the group root when list-style
+	local primary = vehicle_id
+	local best = nil
+	for _, id in pairs(ids) do
+		local n = tonumber(id)
+		if n and (best == nil or n < best) then
+			best = n
+			primary = n
+		end
+	end
+	return primary, group_id
+end
+
+-- Horizontal forward boost: moves the whole ship group without fighting buoyancy.
 local function applyVehicleBoost(peer_id, game_ticks)
 	local vid = getSeatedVehicle(peer_id)
-	if not vid then return false end
-	local mat, ok = server.getVehiclePos(vid)
+	if not vid then
+		if boost.active then
+			boost.active = false
+			boost.accum = 0
+			notify(peer_id, "Boost OFF (left seat)")
+			announce(peer_id, "Vehicle boost stopped — you left the seat.")
+		end
+		return false
+	end
+
+	boost.accum = (boost.accum or 0) + math.max(1, game_ticks or 1)
+	if boost.accum < (boost.interval or 6) then
+		return true
+	end
+	local ticks = boost.accum
+	boost.accum = 0
+
+	local primary, group_id = primaryVehicleOf(vid)
+	local mat, ok = server.getVehiclePos(primary)
+	if not ok or not mat then
+		mat, ok = server.getVehiclePos(vid)
+	end
 	if not ok or not mat then return false end
-	-- +40 knots ≈ 20.577 m/s. game runs ~60 ticks/sec → meters this frame
-	local gt = math.max(1, game_ticks or 1)
-	local meters = (boost.knots * 0.514444) * (gt / 60)
-	local moved = matrix.multiply(mat, matrix.translation(0, 0, meters))
-	server.moveVehicle(vid, moved)
+
+	-- Target additive speed (+40 kn ≈ 20.58 m/s)
+	local meters = (boost.knots * 0.514444) * (ticks / 60)
+	if meters > 6 then meters = 6 end -- lag safety
+	if meters < 0.05 then return true end
+
+	local ox, oy, oz = matrix.position(mat)
+	-- 1m local-forward sample → flatten to XZ so pitch doesn't slam boats into the sea
+	local ahead = matrix.multiply(mat, matrix.translation(0, 0, 1))
+	local ax, ay, az = matrix.position(ahead)
+	local dx, dz = ax - ox, az - oz
+	local fl = math.sqrt(dx * dx + dz * dz)
+	if fl < 0.05 then
+		dx, dz = lookFlat(peer_id)
+	else
+		dx, dz = dx / fl, dz / fl
+	end
+
+	-- World-space horizontal translate (preserves rotation, keeps Y)
+	local target = matrix.multiply(matrix.translation(dx * meters, 0, dz * meters), mat)
+
+	if group_id and server.moveGroup then
+		server.moveGroup(group_id, target)
+	elseif server.moveVehicle then
+		server.moveVehicle(primary or vid, target)
+	end
 	return true
 end
 
@@ -682,6 +759,7 @@ local function runCommand(line)
 		local mode = tostring(p[3] or "on")
 		if mode == "off" or mode == "0" or mode == "stop" then
 			boost.active = false
+			boost.accum = 0
 			notify(peer_id, "Vehicle boost OFF")
 		else
 			local vid = getSeatedVehicle(peer_id)
@@ -691,8 +769,9 @@ local function runCommand(line)
 			else
 				boost.active = true
 				boost.peer = peer_id
+				boost.accum = 0
 				notify(peer_id, "Boost +40 kn")
-				announce(peer_id, "Vehicle boost +40 knots. Toggle off when done.")
+				announce(peer_id, "Vehicle boost ON — whole ship, +40 knots forward. Toggle off when done.")
 			end
 		end
 
@@ -808,7 +887,7 @@ local function help(peer_id)
 	announce(peer_id, "?boom [0-1] [dist]   Explosion")
 	announce(peer_id, "?wind <0-50>   Ultra wind / waves")
 	announce(peer_id, "?chaos / ?chaos off")
-	announce(peer_id, "?boost / ?boost off   Vehicle speed shove")
+	announce(peer_id, "?boost / ?boost off   Ship speed boost (+40 kn, whole group)")
 end
 
 local GIVE = {
@@ -845,6 +924,7 @@ function onCreate(is_world_create)
 	tracked_sirens = {}
 	stopChaos()
 	boost.active = false
+	boost.accum = 0
 	silenceSirens()
 	announce(-1, "StormPower ready. Sirens muted. Type ?sp for commands.")
 end

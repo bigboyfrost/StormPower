@@ -1,7 +1,7 @@
 {
   "name": "stormpower",
   "productName": "StormPower",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "StormPower - external spawn overlay for Stormworks. By Aimless Developement.",
   "author": "Aimless Developement",
   "license": "MIT",
@@ -50,9 +50,7 @@
       {
         "from": "addon",
         "to": "addon",
-        "filter": [
-          "**/*"
-        ]
+        "filter": ["**/*"]
       },
       {
         "from": "build/icon.ico",
@@ -63,9 +61,7 @@
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
       "icon": "build/icon.ico",
