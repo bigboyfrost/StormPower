@@ -1,5 +1,10 @@
 # StormPower Changelog
 
+## 1.4.2
+- Friend-ready zip pack with hardcoded GitHub repo (`bigboyfrost/StormPower`)
+- install.bat does full first-time setup (npm + addon)
+- START_HERE.txt for sharing with friends
+
 ## 1.4.1
 - Custom HTML update screen with changelogs when running the updater
 - Update window opens from update.bat and the in-app Update button

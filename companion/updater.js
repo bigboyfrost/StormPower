@@ -23,9 +23,10 @@ function readJson(file, fallback) {
 function getConfig() {
   const cfg = readJson(CONFIG_FILE, {});
   return {
-    owner: cfg.owner || process.env.STORMPOWER_GH_OWNER || "",
+    // Hardcoded friend-ready defaults — update-config.json can still override
+    owner: cfg.owner || process.env.STORMPOWER_GH_OWNER || "bigboyfrost",
     repo: cfg.repo || process.env.STORMPOWER_GH_REPO || "StormPower",
-    branch: cfg.branch || "main",
+    branch: cfg.branch || process.env.STORMPOWER_GH_BRANCH || "master",
   };
 }
 

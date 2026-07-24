@@ -1,0 +1,33 @@
+============================================
+  StormPower  ·  Aimless Developement
+  Friend pack — START HERE
+============================================
+
+What you need
+  • Windows PC
+  • Stormworks: Build and Rescue
+  • Node.js LTS  →  https://nodejs.org/
+
+Install (one time)
+  1. Unzip this folder anywhere (Desktop is fine)
+  2. Double-click  install.bat
+  3. Double-click  start.bat
+  4. In Stormworks, enable the "StormPower" addon on your save
+  5. Reload the world (or type ?reload_scripts in chat)
+  6. Click the floating SP button
+
+Update later
+  • Double-click  update.bat
+  • A changelog screen opens — click Update Now
+  • Repo is already set to:
+      https://github.com/bigboyfrost/StormPower
+
+Tips
+  • Use Borderless Window in Stormworks so the overlay shows
+  • Exclusive fullscreen hides external windows — use chat (?sp)
+  • Spawn distance slider controls how far things / tsunamis appear
+
+Support / source
+  https://github.com/bigboyfrost/StormPower
+
+MIT © Aimless Developement

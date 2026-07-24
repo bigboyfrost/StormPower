@@ -1,59 +1,51 @@
 # StormPower
 **By Aimless Developement**
 
-External Apple-style spawn menu for *Stormworks: Build and Rescue*.
+External spawn menu for *Stormworks: Build and Rescue*.
+
+## Friend pack — quick start
+
+1. Install [Node.js LTS](https://nodejs.org/)
+2. Run **`install.bat`**
+3. Run **`start.bat`**
+4. Enable addon **StormPower** in your Stormworks save
+5. Click the floating **SP** button
+
+Updates are preconfigured for this repo:
+
+`https://github.com/bigboyfrost/StormPower`
+
+Run **`update.bat`** anytime — a changelog screen appears.
 
 ## Features
 
-- Locked **622×800** overlay, pinned to the **top** of the screen (left or right)
-- Always-on **SP** toggle button (click to show/hide — no keybinds required)
+- Blue / light-blue overlay with black buttons (622×800)
+- Always-on **SP** toggle + optional **Pop out** to another monitor
 - Spawn distance **1–5000 m**
-- Weapons, animals, creatures, weather/wind boost, disasters
-- Chat commands when you prefer typing (`?sp`)
-- Auto-updater (`update.bat`)
-
-## Quick start
-
-1. Install [Node.js LTS](https://nodejs.org/)
-2. Run `install.bat`
-3. Run `start.bat`
-4. Enable addon **StormPower** in your Stormworks save
-5. Click the floating **SP** button to open/close the menu
-
-> Tip: For best overlay visibility use **Borderless Window**. Exclusive fullscreen hides other windows; use chat commands there.
+- Animals, creatures, weapons, equipment, objects, explosions
+- Ultra wind + massive / ultra tsunami loops
+- Disaster siren mute
+- Chat fallbacks (`?sp`)
 
 ## Chat commands
 
 | Command | Example |
 |---|---|
 | `?sp` | Help |
-| `?dist <m>` | `?dist 2500` (1–5000) |
+| `?dist <m>` | `?dist 2500` |
 | `?count <n>` | `?count 10` |
-| `?size <n>` | `?size 2` |
-| `?shark [n] [size] [dist]` | `?shark 5 1 100` |
-| `?whale …` / `?kraken …` | |
-| `?give pistol\|smg\|rifle\|grenade\|c4\|spear\|aid` | `?give rifle` |
-| `?outfit scuba\|diving\|armor\|arctic` | |
+| `?shark / ?whale / ?kraken` | `?shark 5 1 100` |
+| `?waves calm\|choppy\|max\|mega\|ultra\|off` | `?waves ultra` |
+| `?sirens off\|on\|kill` | `?sirens off` |
+| `?boom [0-1] [dist]` | `?boom 0.8 20` |
+| `?give pistol\|smg\|rifle\|…` | `?give rifle` |
 | `?loadout` `?heal` `?money` `?cleanup` | |
-| `?wind <0-10>` | `?wind 5` (0 = off) |
 
-## Overlay controls
+## Tips
 
-- **SP button** — always on screen, show/hide menu
-- **Back** button in the menu
-- Mouse click any list item
-- Left/Right side setting in Quick Setup
-
-## Sharing
-
-```text
-git clone https://github.com/bigboyfrost/StormPower.git
-cd StormPower
-install.bat
-start.bat
-```
-
-Friends can later run `update.bat`.
+- Prefer **Borderless Window** so the overlay is visible
+- Exclusive fullscreen: use chat commands instead
+- Set spawn distance before mega/ultra waves so they land ahead of you
 
 ## License
 

@@ -6,3 +6,4 @@ Thumbs.db
 *.log
 .stormpower-cache/
 companion/user-settings.json
+dist/
