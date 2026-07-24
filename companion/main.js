@@ -591,7 +591,12 @@ app.whenReady().then(async () => {
     },
     onSettingChange: (key, value) => {
       if (key === "wind_speed") {
-        enqueue(`wind|${menu?.settings?.peer ?? 0}|${Number(value) / 100}`);
+        const w = Math.max(0, Number(value) || 0);
+        if (w <= 1) {
+          enqueue(`wind|${menu?.settings?.peer ?? 0}|${w}`);
+        } else {
+          enqueue(`ultra_wind|${menu?.settings?.peer ?? 0}|${w}`);
+        }
         return;
       }
       if (key.startsWith("wave_")) {
@@ -633,6 +638,27 @@ app.whenReady().then(async () => {
         menu.setToggle("ultra_waves", false);
         return { ok: true, message: "Waves cleared" };
       }
+      if (action === "spawn_tornado") {
+        const tier = Math.max(0, Math.min(4, Math.floor(Number(menu.settings.tornado_tier) || 3)));
+        const res = tornadoMod.applyTier(tier);
+        if (!res.ok) return res;
+        if (res.map) {
+          liveMemory.patchFloatMap(res.map).catch(() => {});
+          // Hold the new radii/winds in RAM so the spawn reads buffed values
+          setTimeout(() => liveMemory.patchFloatMap(res.map).catch(() => {}), 80);
+          setTimeout(() => liveMemory.patchFloatMap(res.map).catch(() => {}), 250);
+        }
+        const count = Math.max(1, Math.min(8, Math.floor(Number(menu.settings.count) || 1)));
+        const dist = menu.settings.dist || 200;
+        const peer = menu.settings.peer ?? 0;
+        for (let i = 0; i < count; i++) {
+          enqueue(`disaster|${peer}|tornado|${dist}`);
+        }
+        return {
+          ok: true,
+          message: `Spawned ${count}× tornado (${tornadoMod.tierLabel(tier)})`,
+        };
+      }
       if (action === "engine_mod") {
         const res = engineMod.setInstalled(!!on);
         return res;
@@ -646,20 +672,6 @@ app.whenReady().then(async () => {
           }
         } else {
           liveMemory.stopEngineLive();
-        }
-        return res;
-      }
-      if (action === "tornado_ef5") {
-        const res = tornadoMod.setEf5(!!on);
-        if (on && res.ok) {
-          const mapOn = tornadoMod.livePatchMap(tornadoMod.STOCK, tornadoMod.EF5);
-          const mapHold = tornadoMod.livePatchMap(tornadoMod.EF5, tornadoMod.EF5);
-          liveMemory.patchFloatMap(`${mapOn},${mapHold}`).catch(() => {});
-          enqueue(`disaster|${menu?.settings?.peer ?? 0}|tornado|${menu?.settings?.dist || 200}`);
-          res.message = "EF5 wedge ON + tornado spawning ahead";
-        } else if (!on && res.ok) {
-          const mapOff = tornadoMod.livePatchMap(tornadoMod.EF5, tornadoMod.STOCK);
-          liveMemory.patchFloatMap(mapOff).catch(() => {});
         }
         return res;
       }
@@ -684,6 +696,12 @@ app.whenReady().then(async () => {
   });
   liveMemory.setWaveConfig(waveConfigFromSettings());
 
+  // Wave engine ON by default
+  try {
+    liveMemory.startWaves(waveConfigFromSettings());
+    menu.setToggle("wave_engine", true);
+  } catch (_) {}
+
   try {
     // The old 900m shader only scaled the *visuals*; physics stayed at stock, so
     // giant-looking waves passed through boats. Height now comes from the live
@@ -696,8 +714,6 @@ app.whenReady().then(async () => {
     const overrev = engineMod.isOverrevInstalled();
     menu.setToggle("overrev_engine", !!overrev.installed);
     if (overrev.installed) liveMemory.startEngineLive();
-    const ef5 = tornadoMod.isEf5Installed();
-    menu.setToggle("tornado_ef5", !!ef5.installed);
   } catch (_) {}
 
   createHttpBridge();
@@ -777,7 +793,10 @@ ipcMain.on("toggle-menu", () => menu && menu.toggleOpen());
 ipcMain.on("set-open", (_e, open) => menu && menu.setOpen(!!open));
 ipcMain.on("update-settings", (_e, partial) => menu && menu.updateSettings(partial || {}));
 ipcMain.on("set-search", (_e, q) => menu && menu.setSearch(q));
+ipcMain.on("stm", (_e, dir) => menu && menu.stm(dir));
+ipcMain.on("stm-at", (_e, idx, dir) => menu && menu.stmAt(Number(idx), dir));
 ipcMain.on("activate-index", (_e, idx) => menu && menu.selectIndex(Number(idx)));
+ipcMain.on("focus-index", (_e, idx) => menu && menu.focusIndex(Number(idx)));
 ipcMain.on("back", () => menu && menu.handleNav("back"));
 ipcMain.on("set-detached", (_e, on) => setDetached(!!on));
 ipcMain.on("queue-command", (_e, line) => enqueue(line));

@@ -10,37 +10,12 @@
   const backBtn = document.getElementById("backBtn");
   const popOutBtn = document.getElementById("popOutBtn");
   const lastAction = document.getElementById("lastAction");
-  const countEl = document.getElementById("count");
-  const sizeEl = document.getElementById("size");
-  const distEl = document.getElementById("dist");
-  const countValue = document.getElementById("countValue");
-  const sizeValue = document.getElementById("sizeValue");
-  const distValue = document.getElementById("distValue");
   const searchEl = document.getElementById("search");
 
   let applying = false;
   let flashUntil = 0;
   let detached = false;
   let searchTimer = null;
-
-  function sizeFromSlider() {
-    return Number(sizeEl.value) / 2;
-  }
-
-  function syncLabels() {
-    countValue.textContent = String(countEl.value);
-    sizeValue.textContent = `${sizeFromSlider().toFixed(1)}×`;
-    distValue.textContent = `${distEl.value} m`;
-  }
-
-  function pushSettings() {
-    if (applying || !window.stormpower) return;
-    window.stormpower.updateSettings({
-      count: Number(countEl.value),
-      size: sizeFromSlider(),
-      dist: Number(distEl.value),
-    });
-  }
 
   function setDetachedUi(on) {
     detached = !!on;
@@ -49,18 +24,11 @@
     popOutBtn.classList.toggle("active", detached);
   }
 
-  [countEl, sizeEl, distEl].forEach((el) => {
-    el.addEventListener("input", () => {
-      syncLabels();
-      pushSettings();
-    });
-  });
-
   searchEl.addEventListener("input", () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
       window.stormpower?.setSearch(searchEl.value);
-    }, 80);
+    }, 60);
   });
 
   searchEl.addEventListener("keydown", (e) => {
@@ -69,6 +37,10 @@
       window.stormpower?.nav(
         e.key === "ArrowDown" ? "down" : e.key === "ArrowUp" ? "up" : "select"
       );
+    }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      window.stormpower?.stm(e.key === "ArrowLeft" ? "dec" : "inc");
     }
     if (e.key === "Escape") {
       searchEl.value = "";
@@ -80,6 +52,25 @@
   backBtn.addEventListener("click", () => window.stormpower?.back());
   popOutBtn.addEventListener("click", () => window.stormpower?.setDetached(!detached));
 
+  function stmControls(item, idx) {
+    if (item.folder) return `<span class="chev">›</span>`;
+    if (!item.stm && !item.toggle) return `<span class="chev"></span>`;
+
+    // STM: ‹ amount ›  [iPhone switch]
+    // Arrows edit amount/value first; switch enables or fires the action.
+    const amount = `<span class="stm-value">${item.stmValue || "—"}</span>`;
+    const sw = `<button type="button" class="ios-switch ${item.on ? "on" : ""}" data-act="toggle" data-idx="${idx}" aria-label="Enable"><span class="ios-knob"></span></button>`;
+
+    return `
+      <div class="stm">
+        <button type="button" class="stm-btn" data-act="dec" data-idx="${idx}" aria-label="Decrease">‹</button>
+        ${amount}
+        <button type="button" class="stm-btn" data-act="inc" data-idx="${idx}" aria-label="Increase">›</button>
+        ${sw}
+      </div>
+    `;
+  }
+
   function render(state) {
     if (!state) return;
     applying = true;
@@ -90,43 +81,37 @@
       searchEl.value = state.search || "";
     }
 
-    if (state.settings) {
-      countEl.value = state.settings.count ?? 5;
-      distEl.value = state.settings.dist ?? 20;
-      sizeEl.value = Math.round((state.settings.size ?? 1) * 2);
-      syncLabels();
-    }
-
     listEl.innerHTML = "";
     (state.items || []).forEach((item, idx) => {
       const li = document.createElement("li");
       if (item.active) li.classList.add("active");
-      if (item.toggle) li.classList.add("has-toggle");
-
-      const right = item.folder
-        ? `<span class="chev">›</span>`
-        : item.toggle
-          ? `<button type="button" class="ios-switch ${item.on ? "on" : ""}" data-idx="${idx}" aria-label="Toggle ${item.label}"><span class="ios-knob"></span></button>`
-          : `<span class="chev"></span>`;
+      if (item.toggle || item.stm) li.classList.add("has-stm");
 
       li.innerHTML = `
         <span class="idx">${item.i}</span>
         <span class="label">${item.label}</span>
-        ${right}
+        ${stmControls(item, idx)}
         ${item.sub ? `<span class="sub">${item.sub}</span>` : ""}
       `;
 
-      const sw = li.querySelector(".ios-switch");
-      if (sw) {
-        sw.addEventListener("click", (e) => {
+      li.querySelectorAll("[data-act]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          window.stormpower?.activateIndex(idx);
+          const act = btn.getAttribute("data-act");
+          const i = Number(btn.getAttribute("data-idx"));
+          if (act === "dec") window.stormpower?.stmAt(i, "dec");
+          else if (act === "inc") window.stormpower?.stmAt(i, "inc");
+          else if (act === "toggle") window.stormpower?.activateIndex(i);
         });
-      }
+      });
+
       li.addEventListener("click", (e) => {
-        if (e.target.closest(".ios-switch")) return;
-        window.stormpower?.activateIndex(idx);
+        if (e.target.closest("[data-act]")) return;
+        // Folders open on click; STM rows focus so you can set amount then flip the switch
+        if (item.folder) window.stormpower?.activateIndex(idx);
+        else if (item.stm || item.toggle) window.stormpower?.focusIndex(idx);
+        else window.stormpower?.activateIndex(idx);
       });
       listEl.appendChild(li);
     });
@@ -160,9 +145,7 @@
       versionPill.textContent = `v${cfg.version || "—"}`;
       if (cfg.state) render(cfg.state);
       setDetachedUi(!!cfg.detached);
-      if (cfg.state?.updateAvailable || cfg.updateAvailable) {
-        updateBanner.classList.remove("hidden");
-      }
+      if (cfg.updateAvailable) updateBanner.classList.remove("hidden");
     });
     updateBtn.addEventListener("click", async () => {
       updateText.textContent = "Opening updater…";
@@ -173,11 +156,19 @@
 
   window.addEventListener("keydown", (e) => {
     if (document.activeElement === searchEl) return;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      window.stormpower?.stm("dec");
+      return;
+    }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      window.stormpower?.stm("inc");
+      return;
+    }
     const map = {
       ArrowUp: "up",
       ArrowDown: "down",
-      ArrowLeft: "back",
-      ArrowRight: "select",
       Enter: "select",
       Backspace: "back",
       Escape: "back",
@@ -191,6 +182,4 @@
       searchEl.focus();
     }
   });
-
-  syncLabels();
 })();

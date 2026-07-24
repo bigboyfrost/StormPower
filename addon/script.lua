@@ -26,8 +26,9 @@ local wave_interval = 720 -- 12s fallback when the companion is not driving puls
 local tick_now = 0
 local companion_pulse_at = -100000 -- last tick a companion mega_wave arrived
 local update_pending_ver = nil
+local update_pending_peer = nil
 local update_notify_timer = 0
-local UPDATE_NAG_INTERVAL = 900 -- ~15s at 60tps — keep yelling until they update
+local UPDATE_NAG_INTERVAL = 1800 -- ~30s — local peer only, no announce spam
 local sirens_muted = true
 local tracked_sirens = {}
 local siren_refresh = 0
@@ -805,13 +806,12 @@ local function runCommand(line)
 		notify(peer_id, string.format("Weather set (wind %.2f)", wind))
 
 	elseif cmd == "ultra_wind" then
-		local wind = num(p[3], 5)
-		ultra_wind = math.max(0, wind)
+		local wind = math.max(0, math.min(500, num(p[3], 5)))
+		ultra_wind = wind
 		weather_wind = 1
 		if sea_mode < 1 then sea_mode = 1 end
 		applyWeather()
 		notify(peer_id, "Wind x" .. tostring(wind))
-		announce(peer_id, "Wind force x" .. tostring(wind) .. " (vehicle shove). Wave height is separate — use Ultra Waves + Mega Wave Engine.")
 
 	elseif cmd == "sea" then
 		local mode = math.floor(num(p[3], 0))
@@ -882,10 +882,18 @@ local function runCommand(line)
 		notify(peer_id, string.format("Waves: %dm, bearing %d, every %ds", math.floor(dist), math.floor(bearing), math.floor(interval / 60)))
 
 	elseif cmd == "wind" then
-		local w = math.max(0, math.min(1, num(p[3], 0)))
-		ultra_wind = 0
-		setWeatherState(weather_fog, weather_rain, w, 0)
-		notify(peer_id, string.format("Wind %d%%", math.floor(w * 100 + 0.5)))
+		-- Accept 0-1 (fraction) OR 0-500 (multiplier). Values > 1 use ultra shove.
+		local raw = num(p[3], 0)
+		if raw > 1 then
+			ultra_wind = math.min(500, raw)
+			weather_wind = 1
+			server.setWeather(weather_fog, weather_rain, 1)
+			notify(peer_id, "Wind x" .. tostring(ultra_wind))
+		else
+			ultra_wind = 0
+			setWeatherState(weather_fog, weather_rain, math.max(0, math.min(1, raw)), 0)
+			notify(peer_id, string.format("Wind %d%%", math.floor(raw * 100 + 0.5)))
+		end
 
 	elseif cmd == "chaos" then
 		local mode = tostring(p[3] or "on")
@@ -906,22 +914,17 @@ local function runCommand(line)
 		end
 
 	elseif cmd == "notify_update" then
+		-- Local peer only — never announce(-1) (crashes / spams other players in MP)
 		local ver = tostring(p[3] or "?")
 		update_pending_ver = ver
+		update_pending_peer = peer_id
 		update_notify_timer = 0
 		local msg = "UPDATE StormPower v" .. ver .. " — open Overlay → Check for Updates"
-		announce(-1, msg)
-		local players = server.getPlayers()
-		if players then
-			for _, pl in pairs(players) do
-				if pl.id then notify(pl.id, msg) end
-			end
-		else
-			notify(peer_id, msg)
-		end
+		notify(peer_id, msg)
 
 	elseif cmd == "notify_update_clear" then
 		update_pending_ver = nil
+		update_pending_peer = nil
 		update_notify_timer = 0
 
 	elseif cmd == "sirens" then
@@ -1084,7 +1087,7 @@ function onCreate(is_world_create)
 	stopChaos()
 	stopEngineBoost(-1, true)
 	silenceSirens()
-	announce(-1, "StormPower ready. Sirens muted. Type ?sp for commands.")
+	-- Avoid announce(-1) on create — it floods every client and can desync MP
 end
 
 function onTick(game_ticks)
@@ -1101,13 +1104,8 @@ function onTick(game_ticks)
 		if update_notify_timer >= UPDATE_NAG_INTERVAL then
 			update_notify_timer = 0
 			local msg = "UPDATE StormPower v" .. update_pending_ver .. " — Overlay → Check for Updates"
-			announce(-1, msg)
-			local players = server.getPlayers()
-			if players then
-				for _, pl in pairs(players) do
-					if pl.id then notify(pl.id, msg) end
-				end
-			end
+			local pid = update_pending_peer or 0
+			notify(pid, msg)
 		end
 	end
 

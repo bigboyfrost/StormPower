@@ -140,8 +140,55 @@ h1 {
 }
 
 .search-row {
-  padding: 0 8px 8px;
+  padding: 14px 8px 10px;
+  margin-top: 6px;
   -webkit-app-region: no-drag;
+}
+
+.stm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+  -webkit-app-region: no-drag;
+}
+
+.stm-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(140, 200, 255, 0.35);
+  border-radius: 8px;
+  background: rgba(0, 12, 28, 0.55);
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.stm-btn:hover {
+  border-color: var(--blue);
+  background: rgba(77, 180, 255, 0.18);
+}
+
+.stm-value {
+  min-width: 64px;
+  max-width: 110px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #dff2ff;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list li.has-stm {
+  grid-template-columns: 28px 1fr auto;
 }
 
 #search {

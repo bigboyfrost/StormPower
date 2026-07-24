@@ -28,38 +28,7 @@
       <button id="updateBtn" type="button">Update now</button>
     </div>
 
-    <section class="card settings-card slim">
-      <div class="controls">
-        <div class="control">
-          <div class="control-label">
-            <span>Spawn distance</span>
-            <strong id="distValue">20 m</strong>
-          </div>
-          <input id="dist" type="range" min="1" max="5000" value="20" />
-        </div>
-        <div class="row2">
-          <div class="control">
-            <div class="control-label">
-              <span>Amount</span>
-              <strong id="countValue">5</strong>
-            </div>
-            <input id="count" type="range" min="1" max="50" value="5" />
-          </div>
-          <div class="control">
-            <div class="control-label">
-              <span>Scale</span>
-              <strong id="sizeValue">1.0×</strong>
-            </div>
-            <input id="size" type="range" min="1" max="40" value="2" />
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="card menu-card">
-      <div class="search-row">
-        <input id="search" type="search" placeholder="Search everything…" autocomplete="off" spellcheck="false" />
-      </div>
       <div class="menu-toolbar">
         <button type="button" id="backBtn" class="back-btn">‹ Back</button>
         <div class="breadcrumb" id="path">Home</div>
@@ -67,18 +36,21 @@
           <button type="button" id="popOutBtn" class="tool-btn" title="Detach and drag to another monitor">Pop out</button>
         </div>
       </div>
+      <div class="search-row">
+        <input id="search" type="search" placeholder="Search everything…  (/)" autocomplete="off" spellcheck="false" />
+      </div>
       <ul id="list" class="list"></ul>
       <div id="lastAction" class="last-action"></div>
     </section>
 
     <footer class="footer">
       <div class="keys">
-        <span><kbd>F4</kbd> toggle</span>
+        <span><kbd>F4</kbd> menu</span>
         <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+        <span><kbd>←</kbd><kbd>→</kbd> STM</span>
         <span><kbd>↵</kbd> select</span>
-        <span><kbd>⌫</kbd> back</span>
       </div>
-      <p class="credit">StormPower · Aimless Developement</p>
+      <p class="credit">StormPower · Aimless Developement · STM = Standard Toggle Method</p>
     </footer>
   </div>
   <script src="app.js"></script>

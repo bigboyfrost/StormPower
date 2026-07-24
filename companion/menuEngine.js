@@ -17,14 +17,15 @@ function settingsFile() {
 const defaultSettings = {
   side: "left",
   peer: 0,
-  count: 5,
+  count: 1,
   size: 1.0,
-  dist: 20,
+  dist: 200,
   wave_height: 12,
   wave_interval: 12,
   wave_dist: 250,
   wave_dir: "ahead",
-  wind_speed: 0,
+  wind_speed: 0, // 0–500× shove (ultra wind)
+  tornado_tier: 3, // 0 stock … 4 apocalypse
 };
 
 const DIR_LABELS = {
@@ -44,6 +45,12 @@ const DIR_LABELS = {
 function formatCycleValue(item, value) {
   if (item.cycle === "wave_dir") {
     return DIR_LABELS[value] || String(value);
+  }
+  if (item.cycle === "wind_speed") {
+    return `${value}x`;
+  }
+  if (item.cycle === "tornado_tier") {
+    return ["Stock", "Strong", "EF3", "EF5 Wedge", "Apocalypse"][Number(value)] || String(value);
   }
   return `${value}${item.unit || ""}`;
 }
@@ -301,41 +308,51 @@ const MENU = {
     items: [
       {
         label: "Wave Engine",
-        sub: "Repeating tsunamis at your height setting",
+        sub: "‹› height, then flip switch",
         toggle: "wave_engine",
         local: "wave_engine",
+        stm: true,
       },
       {
         label: "Wave Height",
+        sub: "‹› set, switch applies",
         cycle: "wave_height",
         unit: "x",
+        stm: true,
         values: [1, 2, 3, 5, 8, 12, 18, 25, 40, 60, 90, 140],
       },
       {
         label: "Wave Interval",
+        sub: "‹› set, switch applies",
         cycle: "wave_interval",
         unit: "s",
+        stm: true,
         values: [5, 8, 10, 12, 15, 20, 25, 30, 45, 60],
       },
       {
         label: "Wave Distance",
+        sub: "‹› set, switch applies",
         cycle: "wave_dist",
         unit: "m",
+        stm: true,
         values: [100, 150, 200, 250, 300, 400, 600, 900, 1400],
       },
       {
         label: "Wave Direction",
+        sub: "‹› set, switch applies",
         cycle: "wave_dir",
+        stm: true,
         values: ["ahead", "surround", "random", "N", "NE", "E", "SE", "S", "SW", "W", "NW"],
       },
       {
-        label: "Wind Speed",
+        label: "Wind Force",
+        sub: "‹› up to 500x, switch applies",
         cycle: "wind_speed",
-        unit: "%",
-        values: [0, 10, 25, 40, 60, 80, 100],
+        stm: true,
+        values: [0, 1, 5, 10, 25, 50, 100, 200, 350, 500],
       },
-      { label: "Spawn One Wave", sub: "Single wall, current settings", local: "wave_once" },
-      { label: "Clear Waves", sub: "Cancel event and unlock memory", local: "wave_clear" },
+      { label: "Spawn One Wave", sub: "‹› amount, switch spawns", local: "wave_once", stm: true },
+      { label: "Clear Waves", sub: "Cancel event and unlock memory", local: "wave_clear", stm: true },
     ],
   },
   weather: {
@@ -352,17 +369,18 @@ const MENU = {
     title: "Disasters",
     items: [
       {
-        label: "EF5 Wedge Tornado",
-        sub: "Buff radii + winds, then spawn ahead",
-        toggle: "tornado_ef5",
-        local: "tornado_ef5",
+        label: "Spawn Tornado",
+        sub: "‹› strength, switch spawns",
+        local: "spawn_tornado",
+        cycle: "tornado_tier",
+        stm: true,
+        values: [0, 1, 2, 3, 4],
       },
-      { label: "Spawn Tornado", sub: "Uses current EF5 buff if on", cmd: "disaster", id: "tornado" },
-      { label: "Whirlpool", cmd: "disaster", id: "whirlpool" },
-      { label: "Meteor", cmd: "disaster", id: "meteor" },
-      { label: "Meteor Shower", cmd: "disaster", id: "shower" },
-      { label: "Volcano", cmd: "disaster", id: "volcano" },
-      { label: "Stock Tsunami", sub: "API max only — use Waves for giant walls", cmd: "disaster", id: "tsunami" },
+      { label: "Whirlpool", sub: "‹› amount, switch spawns", cmd: "disaster", id: "whirlpool", stm: true },
+      { label: "Meteor", sub: "‹› amount, switch spawns", cmd: "disaster", id: "meteor", stm: true },
+      { label: "Meteor Shower", sub: "‹› amount, switch spawns", cmd: "disaster", id: "shower", stm: true },
+      { label: "Volcano", sub: "‹› amount, switch spawns", cmd: "disaster", id: "volcano", stm: true },
+      { label: "Stock Tsunami", sub: "‹› amount — API max", cmd: "disaster", id: "tsunami", stm: true },
     ],
   },
   player: {
@@ -396,7 +414,7 @@ function createMenuEngine({
       boost: false,
       engine_mod: false,
       overrev_engine: false,
-      wave_engine: false,
+      wave_engine: true,
       tornado_ef5: false,
       massive_waves: false,
       ultra_waves: false,
@@ -544,6 +562,60 @@ function createMenuEngine({
     }
   }
 
+  function cycleSetting(key, values, delta) {
+    if (!values || !values.length) return null;
+    const cur = state.settings[key];
+    let idx = values.findIndex((v) => String(v) === String(cur));
+    if (idx < 0) idx = 0;
+    const next = values[(idx + delta + values.length) % values.length];
+    state.settings[key] = next;
+    saveSettings(state.settings);
+    return next;
+  }
+
+  function stmAdjust(item, dir) {
+    // Arrows ONLY change amount/value — never flip the switch.
+    if (!item || item.goto) return;
+    const delta = dir === "dec" ? -1 : 1;
+
+    if (item.cycle && item.values) {
+      const next = cycleSetting(item.cycle, item.values, delta);
+      state.lastAction = `${item.label}: ${formatCycleValue(item, next)}`;
+      notify();
+      if (typeof onSettingChange === "function") onSettingChange(item.cycle, next);
+      return;
+    }
+
+    // Wave Engine: amount = wave height before you flip the switch
+    if (item.toggle === "wave_engine") {
+      const values = [1, 2, 3, 5, 8, 12, 18, 25, 40, 60, 90, 140];
+      const next = cycleSetting("wave_height", values, delta);
+      state.lastAction = `Wave Height: ${next}x`;
+      notify();
+      if (typeof onSettingChange === "function") onSettingChange("wave_height", next);
+      return;
+    }
+
+    // Default amount (spawn count) for actions / other toggles
+    const cur = Math.max(1, Math.floor(Number(state.settings.count) || 1));
+    const next = Math.max(1, Math.min(50, cur + delta));
+    state.settings.count = next;
+    saveSettings(state.settings);
+    state.lastAction = `Amount: ${next}`;
+    notify();
+  }
+
+  function stm(dir) {
+    stmAdjust(visibleItems()[state.cursor], dir);
+  }
+
+  function stmAt(idx, dir) {
+    const items = visibleItems();
+    if (!items[idx]) return;
+    state.cursor = idx;
+    stmAdjust(items[idx], dir);
+  }
+
   function activate() {
     const items = visibleItems();
     const item = items[state.cursor];
@@ -557,22 +629,8 @@ function createMenuEngine({
       return;
     }
 
-    // Value cyclers: each press advances to the next preset and applies it live.
-    if (item.cycle) {
-      const values = item.values || [];
-      if (!values.length) return;
-      const cur = state.settings[item.cycle];
-      const idx = values.findIndex((v) => String(v) === String(cur));
-      const next = values[(idx + 1) % values.length];
-      state.settings[item.cycle] = next;
-      saveSettings(state.settings);
-      state.lastAction = `${item.label}: ${formatCycleValue(item, next)}`;
-      notify();
-      if (typeof onSettingChange === "function") onSettingChange(item.cycle, next);
-      return;
-    }
-
-    // Local companion actions (engine mod, update check, etc.) — not sent to Lua
+    // Switch / Enter: enable or fire. Amount is edited with ← → only (STM).
+    // Local companion actions first so cycle+local (e.g. tornado tier) does not advance on enable.
     if (item.local) {
       let next = true;
       if (item.toggle) {
@@ -605,6 +663,15 @@ function createMenuEngine({
           state.lastAction = String(err.message || err);
           notify();
         });
+      return;
+    }
+
+    // Cycle-only rows: switch re-applies the current value (arrows already set it).
+    if (item.cycle && item.values) {
+      const cur = state.settings[item.cycle];
+      state.lastAction = `${item.label}: ${formatCycleValue(item, cur)}`;
+      notify();
+      if (typeof onSettingChange === "function") onSettingChange(item.cycle, cur);
       return;
     }
 
@@ -689,6 +756,13 @@ function createMenuEngine({
     }
   }
 
+  function focusIndex(idx) {
+    const items = visibleItems();
+    if (!items[idx]) return;
+    state.cursor = idx;
+    notify();
+  }
+
   function handleNav(action) {
     if (!state.open && action !== "toggle") return;
     if (action === "up") move(-1);
@@ -749,16 +823,30 @@ function createMenuEngine({
       title: searching ? "Search" : p.title,
       search: state.search || "",
       cursor: state.cursor,
-      items: items.map((it, i) => ({
-        i: i + 1,
-        label: it.label,
-        sub: it.cycle ? formatCycleValue(it, state.settings[it.cycle]) : it.sub || "",
-        folder: !!it.goto,
-        cycle: !!it.cycle,
-        toggle: it.toggle || null,
-        on: it.toggle ? !!state.toggles[it.toggle] : false,
-        active: i === state.cursor,
-      })),
+      items: items.map((it, i) => {
+        let stmValue = "";
+        if (it.cycle) {
+          stmValue = formatCycleValue(it, state.settings[it.cycle]);
+        } else if (it.toggle === "wave_engine") {
+          stmValue = `${state.settings.wave_height}x`;
+        } else if (it.stm || it.cmd || it.local) {
+          stmValue = `×${Math.max(1, Math.floor(Number(state.settings.count) || 1))}`;
+        } else if (it.toggle) {
+          stmValue = `×${Math.max(1, Math.floor(Number(state.settings.count) || 1))}`;
+        }
+        return {
+          i: i + 1,
+          label: it.label,
+          sub: it.sub || "",
+          folder: !!it.goto,
+          cycle: !!it.cycle,
+          stm: !!(it.stm || it.toggle || it.cycle || it.cmd || it.local),
+          stmValue,
+          toggle: it.toggle || null,
+          on: it.toggle ? !!state.toggles[it.toggle] : false,
+          active: i === state.cursor,
+        };
+      }),
       settings: { ...state.settings },
       toggles: { ...state.toggles },
       lastAction: state.lastAction,
@@ -800,6 +888,9 @@ function createMenuEngine({
     back,
     move,
     selectIndex,
+    focusIndex,
+    stm,
+    stmAt,
     get settings() {
       return state.settings;
     },
