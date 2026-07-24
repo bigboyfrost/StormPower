@@ -39,7 +39,7 @@ const MENU = {
       { label: "Tools & Equipment", sub: "Meds, torches, radios", goto: "equipment" },
       { label: "Outfits", sub: "Suits and armor", goto: "outfits" },
       { label: "World Objects", sub: "Barrels, crates, props", goto: "objects" },
-      { label: "Weather & Wind", sub: "Wind beyond stock limits", goto: "weather" },
+      { label: "Weather & Waves", sub: "Sea state, massive waves, wind", goto: "weather" },
       { label: "Disasters", sub: "Tsunami, tornado, meteor…", goto: "disasters" },
       { label: "Player", sub: "Heal, money, loadout", goto: "player" },
       { label: "Game Rules", sub: "Fuel, damage, no-clip", goto: "rules" },
@@ -144,17 +144,16 @@ const MENU = {
     ],
   },
   weather: {
-    title: "Weather & Wind",
+    title: "Weather & Waves",
     items: [
-      { label: "Clear Skies", cmd: "weather", fog: 0, rain: 0, wind: 0 },
-      { label: "Stock Max Wind (1×)", cmd: "weather", fog: 0, rain: 0, wind: 1 },
-      { label: "StormPower Wind 2×", cmd: "wind_boost", wind: 2 },
-      { label: "StormPower Wind 3×", cmd: "wind_boost", wind: 3 },
-      { label: "StormPower Wind 5×", cmd: "wind_boost", wind: 5 },
-      { label: "StormPower Wind 10×", cmd: "wind_boost", wind: 10 },
-      { label: "Stop Wind Boost", cmd: "wind_boost", wind: 0 },
+      { label: "Clear / Calm Seas", sub: "No wind, flat water", cmd: "sea", mode: 0, wind: 0 },
+      { label: "Choppy Seas (worst ride)", sub: "Wind 0.72 — big + frequent waves", cmd: "sea", mode: 1, wind: 0.72 },
+      { label: "Max Weather Waves", sub: "Wind 1.0 — tallest stock waves (deep ocean)", cmd: "sea", mode: 1, wind: 1 },
+      { label: "MASSIVE WAVES", sub: "Max seas + repeating giant wave events", cmd: "sea", mode: 2, wind: 1 },
+      { label: "Stop Massive Waves", sub: "Cancel wave events, calm wind", cmd: "sea", mode: 0, wind: 0 },
+      { label: "Spawn One Mega Wave", sub: "Single max tsunami near you", cmd: "mega_wave" },
       { label: "Heavy Fog", cmd: "weather", fog: 1, rain: 0, wind: 0.2 },
-      { label: "Heavy Rain", cmd: "weather", fog: 0.2, rain: 1, wind: 0.4 },
+      { label: "Heavy Rain + Wind", cmd: "weather", fog: 0.2, rain: 1, wind: 0.85 },
     ],
   },
   disasters: {
@@ -232,6 +231,10 @@ function createMenuEngine({ enqueue, onChange, onSideChange }) {
         return `disaster|${peer}|${item.id}|${Math.max(dist, 60)}`;
       case "weather":
         return `weather|${peer}|${item.fog}|${item.rain}|${item.wind}`;
+      case "sea":
+        return `sea|${peer}|${item.mode}|${item.wind}`;
+      case "mega_wave":
+        return `mega_wave|${peer}`;
       case "wind_boost":
         return `wind_boost|${peer}|${item.wind}`;
       case "heal":

@@ -10,9 +10,13 @@ local PORT = 21773
 local POLL_EVERY = 4
 local tick_counter = 0
 local spawned = {}
-local wind_boost = 0
 local weather_fog = 0
 local weather_rain = 0
+local weather_wind = 0
+-- sea_mode: 0 = off, 1 = weather waves only, 2 = weather + repeating mega wave events
+local sea_mode = 0
+local tsunami_timer = 0
+local TSUNAMI_INTERVAL = 240 -- ticks between mega-wave refreshes (~4s)
 
 -- Session defaults for chat commands
 local session = {
@@ -90,11 +94,22 @@ end
 local function setWeatherState(fog, rain, wind)
 	weather_fog = fog
 	weather_rain = rain
-	if wind_boost > 0 then
-		server.setWeather(fog, rain, wind_boost)
-	else
-		server.setWeather(fog, rain, wind)
+	-- Waves ONLY respond to wind in 0-1. Values above 1 do not make bigger waves.
+	weather_wind = math.max(0, math.min(1, wind))
+	server.setWeather(weather_fog, weather_rain, weather_wind)
+end
+
+local function spawnMegaWaveNear(peer_id)
+	-- Giant gerstner wave event (this is what creates "massive" seas beyond normal chop)
+	local mat = frontMatrix(peer_id, 150, 0)
+	if not mat then
+		mat = server.getPlayerPos(peer_id)
 	end
+	if mat then
+		server.spawnTsunami(mat, 1.0)
+		return true
+	end
+	return false
 end
 
 local function runCommand(line)
@@ -213,20 +228,53 @@ local function runCommand(line)
 		local fog = num(p[3], 0)
 		local rain = num(p[4], 0)
 		local wind = num(p[5], 0)
-		wind_boost = 0
+		sea_mode = 0
+		server.cancelGerstner()
 		setWeatherState(fog, rain, wind)
-		notify(peer_id, string.format("Weather set (wind %.1f)", wind))
+		notify(peer_id, string.format("Weather set (wave wind %.2f)", weather_wind))
+
+	elseif cmd == "sea" then
+		-- mode 0 calm, 1 weather waves, 2 massive (weather + tsunami loop)
+		local mode = math.floor(num(p[3], 0))
+		local wind = num(p[4], 1)
+		sea_mode = mode
+		tsunami_timer = 0
+		if mode <= 0 then
+			server.cancelGerstner()
+			setWeatherState(weather_fog, weather_rain, 0)
+			notify(peer_id, "Seas calmed")
+			announce(peer_id, "Wave mode OFF")
+		else
+			setWeatherState(weather_fog, weather_rain, wind)
+			if mode >= 2 then
+				spawnMegaWaveNear(peer_id)
+				notify(peer_id, "MASSIVE WAVES ON")
+				announce(peer_id, "Massive waves: max sea state + repeating mega wave events. Best in deep ocean (300m+).")
+			else
+				server.cancelGerstner()
+				notify(peer_id, string.format("Sea state ON (wind %.2f)", weather_wind))
+				announce(peer_id, "Weather waves active. Deep ocean (300m+) makes the tallest waves.")
+			end
+		end
+
+	elseif cmd == "mega_wave" then
+		if spawnMegaWaveNear(peer_id) then
+			-- Keep weather wind max so residual seas stay huge
+			setWeatherState(weather_fog, weather_rain, 1)
+			notify(peer_id, "Mega wave spawned")
+		else
+			announce(peer_id, "Could not spawn mega wave")
+		end
 
 	elseif cmd == "wind_boost" then
+		-- Legacy: map to sea modes. Values >1 become MASSIVE mode.
 		local wind = num(p[3], 0)
 		if wind <= 0 then
-			wind_boost = 0
-			server.setWeather(weather_fog, weather_rain, 0)
-			notify(peer_id, "Wind boost off")
+			runCommand("sea|" .. peer_id .. "|0|0")
+		elseif wind <= 1 then
+			runCommand("sea|" .. peer_id .. "|1|" .. tostring(wind))
 		else
-			wind_boost = wind
-			server.setWeather(weather_fog, weather_rain, wind_boost)
-			notify(peer_id, "Wind boost " .. tostring(wind) .. "x")
+			runCommand("sea|" .. peer_id .. "|2|1")
 		end
 
 	elseif cmd == "heal" then
@@ -287,9 +335,11 @@ local function help(peer_id)
 	announce(peer_id, "?kraken [n] [size] [dist]")
 	announce(peer_id, "?give pistol|smg|rifle|grenade|c4|spear|aid")
 	announce(peer_id, "?loadout  ?heal  ?money  ?cleanup")
-	announce(peer_id, "?wind <0-10>        0=off, 1=stock max, 2-10=boost")
 	announce(peer_id, "?outfit scuba|diving|armor|arctic")
-	announce(peer_id, "Overlay: click the always-on SP button to show/hide menu")
+	announce(peer_id, "?waves calm|choppy|max|mega|off")
+	announce(peer_id, "?tsunami            One mega wave near you")
+	announce(peer_id, "?wind <0-10>        Alias (2+ = massive waves)")
+	announce(peer_id, "Overlay: click the SP button to show/hide menu")
 end
 
 local GIVE = {
@@ -315,19 +365,36 @@ local OUTFITS = {
 
 function onCreate(is_world_create)
 	spawned = {}
-	wind_boost = 0
+	sea_mode = 0
+	weather_wind = 0
+	tsunami_timer = 0
 	tick_counter = 0
 	announce(-1, "StormPower ready. Type ?sp for commands. Use the SP overlay button to open the menu.")
 end
 
 function onTick(game_ticks)
-	tick_counter = tick_counter + (game_ticks or 1)
+	local gt = game_ticks or 1
+	tick_counter = tick_counter + gt
 	if tick_counter >= POLL_EVERY then
 		tick_counter = 0
 		server.httpGet(PORT, "/sw/poll")
 	end
-	if wind_boost > 0 then
-		server.setWeather(weather_fog, weather_rain, wind_boost)
+
+	-- Keep sea state locked so the game cannot ease waves down
+	if sea_mode >= 1 then
+		server.setWeather(weather_fog, weather_rain, weather_wind)
+	end
+
+	-- MASSIVE mode: refresh giant wave events (only one gerstner event at a time)
+	if sea_mode >= 2 then
+		tsunami_timer = tsunami_timer + gt
+		if tsunami_timer >= TSUNAMI_INTERVAL then
+			tsunami_timer = 0
+			local players = server.getPlayers()
+			local peer = 0
+			if players[1] then peer = players[1].id end
+			spawnMegaWaveNear(peer)
+		end
 	end
 end
 
@@ -399,6 +466,26 @@ function onCustomCommand(full_message, peer_id, is_admin, is_auth, command, ...)
 	elseif command == "?cleanup" then
 		runCommand("cleanup|" .. peer_id)
 	elseif command == "?wind" then
-		runCommand(string.format("wind_boost|%d|%s", peer_id, aNum(1, 0)))
+		local w = aNum(1, 0)
+		if w <= 0 then
+			runCommand("sea|" .. peer_id .. "|0|0")
+		elseif w <= 1 then
+			runCommand("sea|" .. peer_id .. "|1|" .. tostring(w))
+		else
+			runCommand("sea|" .. peer_id .. "|2|1")
+		end
+	elseif command == "?waves" then
+		local mode = string.lower(tostring(args[1] or "max"))
+		if mode == "off" or mode == "calm" then
+			runCommand("sea|" .. peer_id .. "|0|0")
+		elseif mode == "choppy" then
+			runCommand("sea|" .. peer_id .. "|1|0.72")
+		elseif mode == "mega" or mode == "massive" then
+			runCommand("sea|" .. peer_id .. "|2|1")
+		else
+			runCommand("sea|" .. peer_id .. "|1|1")
+		end
+	elseif command == "?tsunami" or command == "?megawave" then
+		runCommand("mega_wave|" .. peer_id)
 	end
 end
