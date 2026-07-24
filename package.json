@@ -1,7 +1,7 @@
 {
   "name": "stormpower",
   "productName": "StormPower",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "StormPower - external spawn overlay for Stormworks. By Aimless Developement.",
   "author": "Aimless Developement",
   "license": "MIT",
@@ -25,12 +25,14 @@
   "devDependencies": {
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
-    "png-to-ico": "^2.1.8"
+    "png-to-ico": "^2.1.8",
+    "rcedit": "^4.0.1"
   },
   "build": {
     "appId": "com.aimless.stormpower",
     "productName": "StormPower",
     "copyright": "Copyright Aimless Developement",
+    "afterPack": "./build/afterPack.js",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -48,7 +50,9 @@
       {
         "from": "addon",
         "to": "addon",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "build/icon.ico",
@@ -59,7 +63,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico",
@@ -78,7 +84,9 @@
       "uninstallDisplayName": "StormPower",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico"
+      "installerHeaderIcon": "build/icon.ico",
+      "include": "installer.nsh",
+      "deleteAppDataOnUninstall": false
     },
     "publish": [
       {

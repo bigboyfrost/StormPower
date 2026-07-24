@@ -1,4 +1,8 @@
-# StormPower Changelog
+﻿# StormPower Changelog
+
+## 1.5.1
+- App shortcut keeps the lightning icon (was resetting to Electron)
+- Installer deletes itself a few seconds after a successful install
 
 ## 1.5.0
 - Real Windows installer (StormPower-Setup.exe) with desktop shortcut
